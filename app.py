@@ -1,13 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from questions import generate_question_set
+from questions import generate_questions_for_practice, generate_questions_for_assessment
 
 app = Flask(__name__)
-CORS(app)  # allow frontend requests
+CORS(app)
 
-# In-memory storage for users and assessments (use DB later)
+# In-memory storage for users and assessment results
 users = []
-assessments = []
+results = []
 
 # Health check
 @app.route("/health")
@@ -18,18 +18,18 @@ def health():
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    if not data.get("name") or not data.get("email") or not data.get("password"):
-        return jsonify({"error": "Missing fields"}), 400
+    required_fields = ["name", "email", "password"]
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Missing required fields"}), 400
 
     # Check if email exists
-    for user in users:
-        if user["email"] == data["email"]:
-            return jsonify({"error": "Email already exists"}), 400
+    if any(u["email"] == data["email"] for u in users):
+        return jsonify({"error": "Email already registered"}), 400
 
     users.append({
         "name": data["name"],
         "email": data["email"],
-        "password": data["password"]  # In production, hash this!
+        "password": data["password"],  # hash in production
     })
     return jsonify({"message": "User registered successfully"}), 201
 
@@ -37,32 +37,61 @@ def register():
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    for user in users:
-        if user["email"] == data.get("email") and user["password"] == data.get("password"):
+    for u in users:
+        if u["email"] == data.get("email") and u["password"] == data.get("password"):
             return jsonify({"message": "Login successful"}), 200
     return jsonify({"error": "Invalid credentials"}), 401
 
-# Generate practice question
+# Practice endpoint
 @app.route("/practice", methods=["POST"])
 def practice():
     data = request.get_json()
     curriculum = data.get("curriculum")
     grade = data.get("grade")
     subject = data.get("subject")
+    topics = data.get("topics", [])  # list of topics
+    questions_per_topic = data.get("count_per_topic", 30)
 
-    question = generate_question_set(curriculum, grade, subject, 1)[0]
-    return jsonify({"question": question})
+    questions = generate_questions_for_practice(curriculum, grade, subject, topics, questions_per_topic)
+    return jsonify({"questions": questions}), 200
 
-# Generate assessment (70 questions)
+# Assessment endpoint
 @app.route("/assessment", methods=["POST"])
 def assessment():
     data = request.get_json()
     curriculum = data.get("curriculum")
     grade = data.get("grade")
     subject = data.get("subject")
+    num_questions = data.get("count", 70)
 
-    questions = generate_question_set(curriculum, grade, subject, 70)
-    return jsonify({"questions": questions})
+    questions = generate_questions_for_assessment(curriculum, grade, subject, num_questions)
+    return jsonify({"questions": questions}), 200
+
+# Submit assessment results
+@app.route("/submit_assessment", methods=["POST"])
+def submit_assessment():
+    data = request.get_json()
+    user_email = data.get("email")
+    score = data.get("score")
+    total = data.get("total", 70)
+    percentage = round((score/total)*100, 2)
+    passed = percentage >= 85
+
+    results.append({
+        "email": user_email,
+        "score": score,
+        "total": total,
+        "percentage": percentage,
+        "passed": passed
+    })
+
+    return jsonify({
+        "message": "Assessment submitted",
+        "score": score,
+        "percentage": percentage,
+        "passed": passed
+    }), 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
