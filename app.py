@@ -1,97 +1,85 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from questions import generate_questions_for_practice, generate_questions_for_assessment
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import io
+import datetime
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-# In-memory storage for users and assessment results
-users = []
-results = []
+CERT_DIR = "certificates"
+os.makedirs(CERT_DIR, exist_ok=True)
 
-# Health check
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok"}), 200
-
-# Register user
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    required_fields = ["name", "email", "password"]
-    if not all(field in data for field in required_fields):
-        return jsonify({"error": "Missing required fields"}), 400
-
-    # Check if email exists
-    if any(u["email"] == data["email"] for u in users):
-        return jsonify({"error": "Email already registered"}), 400
-
-    users.append({
-        "name": data["name"],
-        "email": data["email"],
-        "password": data["password"],  # hash in production
-    })
-    return jsonify({"message": "User registered successfully"}), 201
-
-# Login user
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    for u in users:
-        if u["email"] == data.get("email") and u["password"] == data.get("password"):
-            return jsonify({"message": "Login successful"}), 200
-    return jsonify({"error": "Invalid credentials"}), 401
-
-# Practice endpoint
-@app.route("/practice", methods=["POST"])
-def practice():
-    data = request.get_json()
-    curriculum = data.get("curriculum")
-    grade = data.get("grade")
-    subject = data.get("subject")
-    topics = data.get("topics", [])  # list of topics
-    questions_per_topic = data.get("count_per_topic", 30)
-
-    questions = generate_questions_for_practice(curriculum, grade, subject, topics, questions_per_topic)
-    return jsonify({"questions": questions}), 200
-
-# Assessment endpoint
-@app.route("/assessment", methods=["POST"])
-def assessment():
-    data = request.get_json()
-    curriculum = data.get("curriculum")
-    grade = data.get("grade")
-    subject = data.get("subject")
-    num_questions = data.get("count", 70)
-
-    questions = generate_questions_for_assessment(curriculum, grade, subject, num_questions)
-    return jsonify({"questions": questions}), 200
-
-# Submit assessment results
 @app.route("/submit_assessment", methods=["POST"])
 def submit_assessment():
-    data = request.get_json()
-    user_email = data.get("email")
+    data = request.json
+    name = data.get("name", "Student")
+    email = data.get("email")
+    curriculum = data.get("curriculum", "N/A")
+    grade = data.get("grade", "N/A")
+    subject = data.get("subject", "N/A")
+    assessment_title = data.get("assessment_title", "Assessment")
     score = data.get("score")
-    total = data.get("total", 70)
-    percentage = round((score/total)*100, 2)
+    total = data.get("total")
+
+    if email is None or score is None or total is None:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    percentage = round((score / total) * 100, 2)
     passed = percentage >= 85
 
-    results.append({
-        "email": user_email,
-        "score": score,
-        "total": total,
-        "percentage": percentage,
-        "passed": passed
-    })
+    certificate_link = None
+
+    if passed:
+        # Generate certificate PDF
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+
+        # Header
+        c.setFont("Helvetica-Bold", 28)
+        c.drawCentredString(width / 2, height - 80, "Ideolix Learning Hub")
+        c.setFont("Helvetica-Bold", 22)
+        c.drawCentredString(width / 2, height - 130, "Certificate of Achievement")
+
+        # Student Info
+        c.setFont("Helvetica", 16)
+        c.drawCentredString(width / 2, height - 180, f"Awarded to: {name} ({email})")
+        c.drawCentredString(width / 2, height - 210, f"Curriculum: {curriculum} | Grade: {grade}")
+        c.drawCentredString(width / 2, height - 240, f"Subject: {subject} | Assessment: {assessment_title}")
+        c.drawCentredString(width / 2, height - 270, f"Score: {score}/{total} ({percentage}%)")
+        c.drawCentredString(width / 2, height - 300, f"Date: {datetime.date.today().strftime('%B %d, %Y')}")
+
+        # Footer / Congratulations
+        c.setFont("Helvetica-Oblique", 16)
+        c.drawCentredString(width / 2, height - 360, "Congratulations on your achievement!")
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+
+        # Save PDF
+        safe_email = email.replace("@", "_").replace(".", "_")
+        filename = f"{CERT_DIR}/{safe_email}_certificate.pdf"
+        with open(filename, "wb") as f:
+            f.write(buffer.read())
+
+        certificate_link = f"/certificate/{os.path.basename(filename)}"
 
     return jsonify({
-        "message": "Assessment submitted",
-        "score": score,
         "percentage": percentage,
-        "passed": passed
-    }), 200
+        "passed": passed,
+        "certificate": certificate_link
+    })
 
+@app.route("/certificate/<filename>", methods=["GET"])
+def get_certificate(filename):
+    path = os.path.join(CERT_DIR, filename)
+    if os.path.exists(path):
+        return send_file(path, as_attachment=True)
+    return jsonify({"error": "Certificate not found"}), 404
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
