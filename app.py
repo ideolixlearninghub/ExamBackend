@@ -342,176 +342,340 @@ def filter_topics_by_grade(all_topics, grade_level):
     
     return filtered_topics
 
+def generate_math_question(template, level, question_id):
+    """Generate math questions with realistic answers"""
+    if level == "elementary":
+        num1 = random.randint(1, 100)
+        num2 = random.randint(1, 50)
+        if "×" in template or "x" in template:
+            correct_answer = num1 * num2
+            options = [
+                correct_answer,
+                correct_answer + random.randint(1, 10),
+                correct_answer - random.randint(1, 10),
+                correct_answer + random.randint(5, 15)
+            ]
+        elif "÷" in template or "/" in template:
+            num2 = random.randint(1, 10)  # Avoid division by zero
+            correct_answer = num1 // num2
+            options = [
+                correct_answer,
+                correct_answer + random.randint(1, 5),
+                correct_answer - random.randint(1, 5),
+                (num1 * num2) // 2
+            ]
+        elif "area" in template.lower():
+            correct_answer = num1 * num1
+            options = [
+                correct_answer,
+                num1 * 4,  # perimeter
+                num1 + num1,
+                num1 * 2
+            ]
+        elif "perimeter" in template.lower():
+            correct_answer = 2 * (num1 + num2)
+            options = [
+                correct_answer,
+                num1 * num2,  # area
+                num1 + num2,
+                (num1 + num2) * 4
+            ]
+        else:  # addition/subtraction
+            if "+" in template:
+                correct_answer = num1 + num2
+            else:
+                correct_answer = num1 - num2
+            options = [
+                correct_answer,
+                correct_answer + random.randint(1, 20),
+                correct_answer - random.randint(1, 20),
+                num1 + num2 + random.randint(1, 10)
+            ]
+    
+    elif level == "middle":
+        if "x +" in template:  # Linear equation
+            a = random.randint(1, 10)
+            b = random.randint(1, 20)
+            c = random.randint(10, 50)
+            correct_answer = (c - b) // a
+            options = [
+                correct_answer,
+                correct_answer + random.randint(1, 5),
+                correct_answer - random.randint(1, 5),
+                (c + b) // a
+            ]
+        elif "area of a circle" in template.lower():
+            radius = random.randint(1, 10)
+            correct_answer = round(3.14 * radius * radius, 2)
+            options = [
+                correct_answer,
+                round(2 * 3.14 * radius, 2),  # circumference
+                radius * radius,
+                round(3.14 * radius, 2)
+            ]
+        elif "% of" in template:
+            percentage = random.randint(1, 100)
+            number = random.randint(10, 1000)
+            correct_answer = round((percentage / 100) * number, 2)
+            options = [
+                correct_answer,
+                round((percentage / 100) * number * 2, 2),
+                round(number / percentage, 2),
+                round(percentage * number / 50, 2)
+            ]
+        else:
+            correct_answer = random.randint(1, 100)
+            options = [
+                correct_answer,
+                correct_answer + random.randint(1, 20),
+                correct_answer - random.randint(1, 20),
+                correct_answer * 2
+            ]
+    
+    else:  # high school
+        correct_answer = random.randint(1, 50)
+        options = [
+            correct_answer,
+            correct_answer + random.randint(1, 10),
+            correct_answer - random.randint(1, 10),
+            correct_answer * 2
+        ]
+    
+    # Shuffle options and find correct index
+    correct_index = options.index(correct_answer)
+    random.shuffle(options)
+    correct_index = options.index(correct_answer)  # Update index after shuffle
+    
+    return {
+        "text": template.format(num1=num1, num2=num2, num3=(num1 + num2) if 'num3' in template else 0,
+                               percentage=percentage if 'percentage' in template else 0,
+                               number=number if 'number' in template else 0),
+        "options": options,
+        "correctAnswer": correct_index,
+        "explanation": f"This is a grade-appropriate {level} level mathematics question.",
+        "difficulty": "Easy" if level == "elementary" else "Medium" if level == "middle" else "Hard"
+    }
+
+def generate_science_question(template, level, subject, question_id):
+    """Generate science questions with realistic answers"""
+    science_answers = {
+        "unit of force": ["Newton", "Joule", "Watt", "Pascal"],
+        "force pulls objects toward earth": ["Gravity", "Magnetism", "Friction", "Tension"],
+        "energy moving object": ["Kinetic energy", "Potential energy", "Thermal energy", "Chemical energy"],
+        "speed of light": ["299,792 km/s", "150,000 km/s", "450,000 km/s", "100,000 km/s"],
+        "action reaction law": ["Newton's 3rd Law", "Newton's 1st Law", "Newton's 2nd Law", "Law of Gravity"],
+        "acceleration due to gravity": ["9.8 m/s²", "6.7 m/s²", "10.2 m/s²", "8.5 m/s²"],
+        "chemical symbol oxygen": ["O", "Ox", "Og", "Om"],
+        "ph neutral solution": ["7", "0", "14", "1"],
+        "states of matter": ["Solid, Liquid, Gas", "Hot, Cold, Warm", "Big, Small, Medium", "Hard, Soft, Medium"],
+        "atomic number hydrogen": ["1", "2", "3", "4"],
+        "gas plants photosynthesis": ["Carbon dioxide", "Oxygen", "Nitrogen", "Hydrogen"]
+    }
+    
+    # Find matching answer pattern
+    question_lower = template.lower()
+    correct_answer = ""
+    options = []
+    
+    for key, possible_answers in science_answers.items():
+        if key in question_lower:
+            correct_answer = possible_answers[0]
+            options = possible_answers.copy()
+            random.shuffle(options)
+            break
+    
+    # If no specific match found, use generic answers
+    if not correct_answer:
+        correct_answer = f"Correct {subject} Answer"
+        options = [
+            correct_answer,
+            f"Alternative {subject} Answer 1",
+            f"Alternative {subject} Answer 2", 
+            f"Alternative {subject} Answer 3"
+        ]
+        random.shuffle(options)
+    
+    correct_index = options.index(correct_answer)
+    
+    return {
+        "text": template,
+        "options": options,
+        "correctAnswer": correct_index,
+        "explanation": f"This is a grade-appropriate {level} level {subject} question.",
+        "difficulty": "Easy" if level == "elementary" else "Medium" if level == "middle" else "Hard"
+    }
+
 # Question generator with grade-appropriate content
 def generate_questions_by_grade(subject, topic, grade_level, count=30):
     questions = []
+    
+    # Determine grade level category
+    if grade_level <= 5:
+        level = "elementary"
+    elif grade_level <= 8:
+        level = "middle"
+    else:
+        level = "high"
     
     # Grade-appropriate question templates
     question_templates = {
         "Mathematics": {
             "elementary": [
-                f"What is {{num1}} + {{num2}}?",
-                f"Solve: {{num1}} - {{num2}} = ?",
-                f"{{num1}} × {{num2}} = ?",
-                f"{{num1}} ÷ {{num2}} = ?",
-                f"What is the area of a square with side {{num1}}?",
-                f"Calculate the perimeter of a rectangle with length {{num1}} and width {{num2}}"
+                "What is {num1} + {num2}?",
+                "Solve: {num1} - {num2} = ?",
+                "{num1} × {num2} = ?",
+                "{num1} ÷ {num2} = ?",
+                "What is the area of a square with side {num1}?",
+                "Calculate the perimeter of a rectangle with length {num1} and width {num2}"
             ],
             "middle": [
-                f"Solve for x: {{num1}}x + {{num2}} = {{num3}}",
-                f"Calculate the area of a circle with radius {{num1}}",
-                f"What is {{percentage}}% of {{number}}?",
-                f"Simplify: {{expression}}",
-                f"Factorize: x² + {{num1}}x + {{num2}}",
-                f"Solve the equation: {{num1}}x - {{num2}} = {{num3}}"
+                "Solve for x: {num1}x + {num2} = {num3}",
+                "Calculate the area of a circle with radius {num1}",
+                "What is {percentage}% of {number}?",
+                "Simplify: 2x + 3x - x",
+                "Factorize: x² + 5x + 6",
+                "Solve the equation: 2x - 5 = 15"
             ],
             "high": [
-                f"Differentiate {{function}} with respect to x",
-                f"Integrate {{function}} dx",
-                f"Solve the quadratic equation: {{equation}}",
-                f"Find the limit: lim(x→{{num1}}) {{function}}",
-                f"Calculate the derivative of {{function}} at x = {{num1}}",
-                f"Solve the system of equations: {{system}}"
+                "Differentiate f(x) = x² with respect to x",
+                "Integrate ∫2x dx",
+                "Solve the quadratic equation: x² + 5x + 6 = 0",
+                "Find the limit: lim(x→2) (x² - 4)/(x - 2)",
+                "Calculate the derivative of f(x) = 3x³ at x = 2",
+                "Solve the system: 2x + y = 7, x - y = -1"
             ]
         },
         "Physics": {
             "elementary": [
-                f"What is the unit of {{quantity}}?",
-                f"Which force pulls objects toward Earth?",
-                f"What type of energy does a moving object have?",
-                f"Name one source of {{energy_type}} energy",
-                f"What is the speed of light?",
-                f"Which law states that every action has an equal and opposite reaction?"
+                "What is the unit of force?",
+                "Which force pulls objects toward Earth?",
+                "What type of energy does a moving object have?",
+                "Name one source of renewable energy",
+                "What is the speed of light?",
+                "Which law states that every action has an equal and opposite reaction?"
             ],
             "middle": [
-                f"Calculate the velocity of an object moving {{distance}}m in {{time}}s",
-                f"What is the acceleration due to gravity on Earth?",
-                f"Explain {{concept}} in physics",
-                f"Solve this force problem: {{scenario}}",
-                f"Calculate the work done when a force of {{num1}}N moves an object {{num2}}m",
-                f"What is the power if {{work}}J of work is done in {{time}}s?"
+                "Calculate the velocity of an object moving 100m in 10s",
+                "What is the acceleration due to gravity on Earth?",
+                "Explain the concept of inertia in physics",
+                "A 5kg object is pushed with 10N force. What is its acceleration?",
+                "Calculate the work done when a force of 20N moves an object 5m",
+                "What is the power if 100J of work is done in 5s?"
             ],
             "high": [
-                f"Apply Newton's {{law_number}} law to {{situation}}",
-                f"Calculate the work done when {{scenario}}",
-                f"Solve this kinematics equation: {{equation}}",
-                f"Explain the principle of {{advanced_concept}}",
-                f"Calculate the electric field strength at a point {{distance}}m from a charge",
-                f"Solve this thermodynamics problem: {{problem}}"
+                "Apply Newton's 2nd law to a car accelerating on a highway",
+                "Calculate the work done when lifting a 10kg object 2m vertically",
+                "Solve this kinematics equation: v² = u² + 2as",
+                "Explain the principle of conservation of energy",
+                "Calculate the electric field strength at a point 2m from a 4C charge",
+                "A gas expands from 2L to 5L at constant pressure. Calculate the work done."
             ]
         },
         "Chemistry": {
             "elementary": [
-                f"What is the chemical symbol for {{element}}?",
-                f"How many electrons does {{element}} have?",
-                f"What is the pH of a neutral solution?",
-                f"Name the three states of matter",
-                f"What is the atomic number of {{element}}?",
-                f"Which gas do plants use for photosynthesis?"
+                "What is the chemical symbol for Oxygen?",
+                "How many electrons does Hydrogen have?",
+                "What is the pH of a neutral solution?",
+                "Name the three states of matter",
+                "What is the atomic number of Hydrogen?",
+                "Which gas do plants use for photosynthesis?"
             ],
             "middle": [
-                f"Balance this chemical equation: {{equation}}",
-                f"Calculate the molar mass of {{compound}}",
-                f"Explain the difference between elements and compounds",
-                f"What is the concentration if {{mass}}g is dissolved in {{volume}}L?",
-                f"Name the type of reaction: {{reaction}}",
-                f"Calculate the number of moles in {{mass}}g of {{substance}}"
+                "Balance this chemical equation: H₂ + O₂ → H₂O",
+                "Calculate the molar mass of H₂O",
+                "Explain the difference between elements and compounds",
+                "What is the concentration if 10g of salt is dissolved in 2L of water?",
+                "Name the type of reaction: CH₄ + 2O₂ → CO₂ + 2H₂O",
+                "Calculate the number of moles in 36g of water"
             ],
             "high": [
-                f"Explain the concept of {{advanced_concept}} in chemistry",
-                f"Calculate the pH of a {{concentration}}M {{acid_base}} solution",
-                f"Solve this stoichiometry problem: {{problem}}",
-                f"Describe the mechanism of {{reaction_type}} reaction",
-                f"Calculate the equilibrium constant for {{reaction}}",
-                f"Explain the principles of {{analytical_technique}}"
+                "Explain the concept of chemical equilibrium",
+                "Calculate the pH of a 0.01M HCl solution",
+                "Solve this stoichiometry problem: How many grams of O₂ are needed to burn 16g of CH₄?",
+                "Describe the mechanism of SN2 reaction",
+                "Calculate the equilibrium constant for N₂ + 3H₂ ⇌ 2NH₃",
+                "Explain the principles of gas chromatography"
+            ]
+        },
+        "Biology": {
+            "elementary": [
+                "What is the basic unit of life?",
+                "Which organ pumps blood in the human body?",
+                "What process do plants use to make food?",
+                "Name one adaptation of desert animals",
+                "What are the stages of a butterfly's life cycle?",
+                "Which gas do animals breathe out?"
+            ],
+            "middle": [
+                "Describe the structure of a plant cell",
+                "What is the function of mitochondria?",
+                "Explain the process of natural selection",
+                "How does the circulatory system work?",
+                "What is DNA and what is its role?",
+                "Describe the process of photosynthesis"
+            ],
+            "high": [
+                "Explain the central dogma of molecular biology",
+                "Describe the process of protein synthesis",
+                "What is the role of enzymes in biochemical reactions?",
+                "Explain the principles of Mendelian genetics",
+                "Describe the immune response to pathogens",
+                "What is CRISPR and how does it work?"
             ]
         }
     }
     
-    # Generate questions based on grade level and subject
+    # Generate questions
     for i in range(count):
-        if subject in question_templates:
-            if grade_level <= 5:  # Elementary
-                level = "elementary"
-                template = random.choice(question_templates[subject][level])
-            elif grade_level <= 8:  # Middle
-                level = "middle"
-                template = random.choice(question_templates[subject][level])
-            else:  # High school
-                level = "high"
-                template = random.choice(question_templates[subject][level])
+        if subject in question_templates and level in question_templates[subject]:
+            template = random.choice(question_templates[subject][level])
             
-            # Fill template with appropriate values
             if subject == "Mathematics":
-                if level == "elementary":
-                    question_text = template.format(
-                        num1=random.randint(1, 100),
-                        num2=random.randint(1, 50),
-                        num3=random.randint(10, 200)
-                    )
-                elif level == "middle":
-                    question_text = template.format(
-                        num1=random.randint(1, 10),
-                        num2=random.randint(1, 20),
-                        num3=random.randint(10, 50),
-                        percentage=random.randint(1, 100),
-                        number=random.randint(10, 1000),
-                        expression=f"{random.randint(2,5)}x + {random.randint(1,10)}"
-                    )
-                else:  # high
-                    question_text = template.format(
-                        function=random.choice(["x²", "sin(x)", "cos(x)", "e^x", "ln(x)"]),
-                        num1=random.randint(1, 5),
-                        equation=f"x² + {random.randint(1,5)}x + {random.randint(1,10)} = 0",
-                        system=f"{random.randint(1,3)}x + {random.randint(1,3)}y = {random.randint(5,15)}"
-                    )
+                question_data = generate_math_question(template, level, i)
+            elif subject in ["Physics", "Chemistry", "Biology"]:
+                question_data = generate_science_question(template, level, subject, i)
             else:
                 # Generic question for other subjects
-                question_text = template.format(
-                    quantity=random.choice(["force", "energy", "velocity", "acceleration"]),
-                    energy_type=random.choice(["renewable", "non-renewable", "kinetic", "potential"]),
-                    distance=random.randint(10, 100),
-                    time=random.randint(1, 10),
-                    concept=random.choice(["gravity", "friction", "momentum", "energy conservation"]),
-                    scenario=f"a {random.randint(1,10)}kg object",
-                    law_number=random.randint(1, 3),
-                    situation=random.choice(["a car accelerating", "a rocket launching", "a ball falling"]),
-                    advanced_concept=random.choice(["quantum mechanics", "relativity", "thermodynamics"]),
-                    element=random.choice(["Oxygen", "Hydrogen", "Carbon", "Nitrogen"]),
-                    compound=random.choice(["H2O", "CO2", "NaCl", "CH4"]),
-                    mass=random.randint(1, 100),
-                    volume=random.randint(1, 10),
-                    reaction=random.choice(["combustion", "synthesis", "decomposition"]),
-                    acid_base=random.choice(["HCl", "NaOH", "H2SO4"]),
-                    concentration=round(random.uniform(0.01, 1.0), 2),
-                    reaction_type=random.choice(["SN1", "SN2", "E1", "E2"]),
-                    analytical_technique=random.choice(["chromatography", "spectroscopy", "titration"]),
-                    work=random.randint(100, 1000),
-                    problem=random.choice(["heating curve", "reaction kinetics", "equilibrium"]),
-                    distance=random.randint(1, 10)
-                )
+                correct_answer = f"Correct {subject} Answer"
+                options = [
+                    correct_answer,
+                    f"Alternative {subject} Answer 1",
+                    f"Alternative {subject} Answer 2",
+                    f"Alternative {subject} Answer 3"
+                ]
+                random.shuffle(options)
+                correct_index = options.index(correct_answer)
+                
+                question_data = {
+                    "text": template,
+                    "options": options,
+                    "correctAnswer": correct_index,
+                    "explanation": f"This is a grade-appropriate {level} level {subject} question about {topic}.",
+                    "difficulty": "Easy" if level == "elementary" else "Medium" if level == "middle" else "Hard"
+                }
         else:
             # Generic question for subjects not in templates
-            question_text = f"Grade {grade_level} {subject} question about {topic}: What is the correct answer to this {subject.lower()} problem?"
-        
-        # Generate realistic options
-        options = [
-            f"Option A - Correct answer for {subject}",
-            f"Option B - Alternative answer 1", 
-            f"Option C - Alternative answer 2",
-            f"Option D - Alternative answer 3"
-        ]
-        
-        # Shuffle options but remember correct answer
-        correct_index = random.randint(0, 3)
+            correct_answer = f"Correct {subject} Answer"
+            options = [
+                correct_answer,
+                f"Alternative {subject} Answer 1",
+                f"Alternative {subject} Answer 2",
+                f"Alternative {subject} Answer 3"
+            ]
+            random.shuffle(options)
+            correct_index = options.index(correct_answer)
+            
+            question_data = {
+                "text": f"Grade {grade_level} {subject} question about {topic}: What is the correct answer?",
+                "options": options,
+                "correctAnswer": correct_index,
+                "explanation": f"This is a grade-appropriate {level} level {subject} question about {topic}.",
+                "difficulty": "Easy" if level == "elementary" else "Medium" if level == "middle" else "Hard"
+            }
         
         questions.append({
             "id": i + 1,
-            "text": question_text,
-            "options": options,
-            "correctAnswer": correct_index,
-            "explanation": f"This is the detailed explanation for the {subject} question about {topic} at grade level {grade_level}. The correct answer is {options[correct_index]} because...",
-            "difficulty": "Easy" if grade_level <= 5 else "Medium" if grade_level <= 8 else "Hard"
+            **question_data
         })
     
     return questions
