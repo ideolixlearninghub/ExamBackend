@@ -1,989 +1,721 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ideolix Learning Hub</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+# app.py - Complete Robust Learning Platform Backend
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+import sqlite3
+import random
+from datetime import datetime, timedelta
+import os
+
+app = Flask(__name__)
+app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+app.config['DATABASE'] = 'learning_hub.db'
+
+CORS(app)
+bcrypt = Bcrypt(app)
+jwt = JWTManager(app)
+
+# Database initialization
+def init_db():
+    conn = sqlite3.connect(app.config['DATABASE'])
+    cursor = conn.cursor()
+    
+    # Users table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            grade_level INTEGER,
+            curriculum TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Progress tracking table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            subject TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            grade_level INTEGER,
+            questions_attempted INTEGER DEFAULT 0,
+            questions_correct INTEGER DEFAULT 0,
+            last_attempted TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# Comprehensive curricula data with grade-specific subjects
+CURRICULA_DATA = {
+    "nigeria": {
+        "name": "Nigerian Curriculum",
+        "grades": {
+            "1": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Verbal Reasoning", "Quantitative Reasoning"],
+            "2": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Verbal Reasoning", "Quantitative Reasoning"],
+            "3": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Verbal Reasoning", "Quantitative Reasoning"],
+            "4": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Verbal Reasoning", "Quantitative Reasoning"],
+            "5": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Verbal Reasoning", "Quantitative Reasoning"],
+            "6": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Computer Science", "Creative Arts"],
+            "7": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Computer Science", "Creative Arts"],
+            "8": ["Mathematics", "English Studies", "Basic Science", "Social Studies", "Computer Science", "Creative Arts"],
+            "9": ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"],
+            "10": ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"],
+            "11": ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"],
+            "12": ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"]
         }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
+    },
+    "cambridge": {
+        "name": "Cambridge International",
+        "grades": {
+            "1": ["Mathematics", "English", "Science", "Global Perspectives"],
+            "2": ["Mathematics", "English", "Science", "Global Perspectives"],
+            "3": ["Mathematics", "English", "Science", "Global Perspectives"],
+            "4": ["Mathematics", "English", "Science", "Global Perspectives"],
+            "5": ["Mathematics", "English", "Science", "Global Perspectives"],
+            "6": ["Mathematics", "English", "Science", "Global Perspectives", "ICT"],
+            "7": ["Mathematics", "English", "Science", "Global Perspectives", "ICT"],
+            "8": ["Mathematics", "English", "Science", "Global Perspectives", "ICT"],
+            "9": ["Mathematics", "English", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"],
+            "10": ["Mathematics", "English", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"],
+            "11": ["Mathematics", "English", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"],
+            "12": ["Mathematics", "English", "Physics", "Chemistry", "Biology", "Geography", "Economics", "Computer Science"]
         }
+    }
+}
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+# Comprehensive grade-specific topics for each subject
+GRADE_TOPICS = {
+    "Mathematics": {
+        "1": [
+            "Counting Numbers 1-50", "Number Recognition", "Basic Addition", "Basic Subtraction", 
+            "Simple Shapes", "Comparing Numbers", "Measurement Basics", "Time - Hours", 
+            "Money - Identifying Coins", "Patterns", "Sorting Objects", "Position Words",
+            "Data Collection", "Simple Graphs", "Problem Solving Basics"
+        ],
+        "2": [
+            "Numbers 1-100", "Addition Facts", "Subtraction Facts", "Place Value", 
+            "Measurement - Length", "Time - Half Hours", "Money - Counting Coins", 
+            "2D Shapes", "Simple Fractions", "Word Problems", "Calendar Skills", 
+            "Temperature Basics", "Symmetry", "Data Interpretation", "Mental Math"
+        ],
+        "9": [
+            "Algebraic Expressions", "Linear Equations", "Quadratic Equations", "Geometry - Angles",
+            "Trigonometry Basics", "Statistics - Mean, Median, Mode", "Probability", 
+            "Coordinate Geometry", "Functions", "Sets Theory", "Number Systems",
+            "Polynomials", "Factorization", "Simultaneous Equations", "Mathematical Reasoning"
+        ],
+        "10": [
+            "Quadratic Functions", "Trigonometric Ratios", "Circle Geometry", "Statistics Advanced",
+            "Probability Distributions", "Sequences and Series", "Coordinate Geometry Advanced",
+            "Functions and Graphs", "Calculus Basics", "Vectors", "Matrices",
+            "Financial Mathematics", "3D Geometry", "Algebraic Fractions", "Inequalities"
+        ]
+    },
+    "Physics": {
+        "9": [
+            "Measurement and Units", "Motion in Straight Line", "Laws of Motion", "Work, Energy and Power",
+            "Gravitation", "Properties of Matter", "Heat and Temperature", "Wave Motion",
+            "Sound Waves", "Light - Reflection", "Light - Refraction", "Electric Current",
+            "Magnetism", "Electromagnetism", "Nuclear Physics Basics"
+        ],
+        "10": [
+            "Kinematics", "Dynamics", "Circular Motion", "Oscillations", "Thermal Physics",
+            "Wave Optics", "Electrostatics", "Current Electricity", "Magnetic Effects",
+            "Electromagnetic Induction", "AC Circuits", "Semiconductor Devices",
+            "Communication Systems", "Modern Physics", "Astrophysics Basics"
+        ]
+    },
+    "Chemistry": {
+        "9": [
+            "Matter and Its Composition", "Atomic Structure", "Periodic Table", "Chemical Bonding",
+            "States of Matter", "Solutions", "Acids, Bases and Salts", "Chemical Reactions",
+            "Metals and Non-metals", "Carbon Compounds", "Environmental Chemistry",
+            "Basic Laboratory Techniques", "Stoichiometry", "Redox Reactions", "Water Chemistry"
+        ],
+        "10": [
+            "Chemical Kinetics", "Chemical Equilibrium", "Ionic Equilibrium", "Thermodynamics",
+            "Electrochemistry", "Surface Chemistry", "Coordination Compounds", "Hydrocarbons",
+            "Haloalkanes and Haloarenes", "Alcohols, Phenols and Ethers", "Aldehydes and Ketones",
+            "Carboxylic Acids", "Organic Nitrogen Compounds", "Biomolecules", "Polymers"
+        ]
+    },
+    "Biology": {
+        "9": [
+            "Cell Biology", "Tissues", "Plant Physiology", "Human Physiology - Digestion",
+            "Human Physiology - Respiration", "Human Physiology - Circulation", "Human Physiology - Excretion",
+            "Human Physiology - Nervous System", "Reproduction in Plants", "Reproduction in Humans",
+            "Genetics and Evolution", "Health and Diseases", "Ecosystem", "Biodiversity",
+            "Environmental Issues"
+        ],
+        "10": [
+            "Molecular Biology", "Genetics Advanced", "Evolutionary Biology", "Human Physiology Advanced",
+            "Plant Physiology Advanced", "Biotechnology", "Microbiology", "Immunology",
+            "Ecology Advanced", "Animal Behavior", "Developmental Biology", "Bioinformatics",
+            "Genetic Engineering", "Conservation Biology", "Medical Biology"
+        ]
+    },
+    "English Language": {
+        "9": [
+            "Grammar Fundamentals", "Sentence Structure", "Parts of Speech", "Tenses",
+            "Punctuation", "Vocabulary Building", "Reading Comprehension", "Essay Writing",
+            "Letter Writing", "Report Writing", "Creative Writing", "Poetry Analysis",
+            "Prose Comprehension", "Drama Interpretation", "Oral English"
+        ],
+        "10": [
+            "Advanced Grammar", "Syntax and Semantics", "Phonetics", "Summary Writing",
+            "Argumentative Essays", "Descriptive Writing", "Narrative Writing", "Literary Devices",
+            "Figures of Speech", "Comprehension Skills", "Vocabulary Enhancement", "Formal Letters",
+            "Informal Letters", "Speech Writing", "Debate and Discussion"
+        ]
+    }
+}
 
-        /* Welcome Page */
-        .welcome-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            text-align: center;
-            color: white;
-        }
-
-        .welcome-container h1 {
-            font-size: 3.5rem;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .welcome-container p {
-            font-size: 1.2rem;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-        }
-
-        .btn {
-            padding: 15px 30px;
-            font-size: 1.1rem;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-            margin: 0 10px;
-        }
-
-        .btn-primary {
-            background: #ff6b6b;
-            color: white;
-        }
-
-        .btn-secondary {
-            background: transparent;
-            color: white;
-            border: 2px solid white;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-
-        /* Auth Forms */
-        .auth-container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            max-width: 400px;
-            margin: 50px auto;
-        }
-
-        .auth-container h2 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn-full {
-            width: 100%;
-            margin: 10px 0;
-        }
-
-        .auth-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        /* Dashboard */
-        .dashboard {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            margin-top: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-
-        .dashboard-header {
-            display: flex;
-            justify-content: between;
-            align-items: center;
-            margin-bottom: 30px;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .user-avatar {
-            width: 50px;
-            height: 50px;
-            background: #667eea;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-        }
-
-        /* Selection Grid */
-        .selection-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-
-        .selection-card {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 25px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
-        }
-
-        .selection-card:hover {
-            transform: translateY(-5px);
-            border-color: #667eea;
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15);
-        }
-
-        .selection-card i {
-            font-size: 2.5rem;
-            color: #667eea;
-            margin-bottom: 15px;
-        }
-
-        .selection-card h3 {
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        /* Question Interface */
-        .question-container {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            margin: 20px 0;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .question-text {
-            font-size: 1.2rem;
-            margin-bottom: 25px;
-            line-height: 1.6;
-        }
-
-        .options-container {
-            display: grid;
-            gap: 15px;
-        }
-
-        .option {
-            padding: 15px 20px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .option:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-
-        .option.selected {
-            border-color: #667eea;
-            background: #667eea;
-            color: white;
-        }
-
-        .option.correct {
-            border-color: #28a745;
-            background: #28a745;
-            color: white;
-        }
-
-        .option.incorrect {
-            border-color: #dc3545;
-            background: #dc3545;
-            color: white;
-        }
-
-        .navigation {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 30px;
-        }
-
-        /* Progress Bar */
-        .progress-container {
-            margin: 20px 0;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #e1e5e9;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .progress {
-            height: 100%;
-            background: #667eea;
-            transition: width 0.3s ease;
-        }
-
-        /* Results */
-        .results-container {
-            text-align: center;
-            padding: 40px;
-        }
-
-        .score-circle {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            background: #667eea;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            font-weight: bold;
-            margin: 0 auto 30px;
-        }
-
-        /* Utility Classes */
-        .hidden {
-            display: none !important;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .mt-20 {
-            margin-top: 20px;
-        }
-
-        .mb-20 {
-            margin-bottom: 20px;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
-            .welcome-container h1 {
-                font-size: 2.5rem;
-            }
-            
-            .auth-container {
-                margin: 20px;
-                padding: 30px 20px;
-            }
-            
-            .selection-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <!-- Welcome Page -->
-    <div id="welcomePage" class="welcome-container">
-        <div class="container">
-            <h1>🎓 Ideolix Learning Hub</h1>
-            <p>Your personalized learning journey starts here</p>
-            <div>
-                <button class="btn btn-primary" onclick="showAuth('login')">Sign In</button>
-                <button class="btn btn-secondary" onclick="showAuth('register')">Sign Up</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Authentication Pages -->
-    <div id="authPage" class="hidden">
-        <div class="container">
-            <!-- Login Form -->
-            <div id="loginForm" class="auth-container">
-                <h2>Welcome Back</h2>
-                <form id="loginFormElement">
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="loginEmail" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="loginPassword" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-full">Sign In</button>
-                </form>
-                <div class="auth-link">
-                    <p>Don't have an account? <a href="#" onclick="showAuth('register')">Sign Up</a></p>
-                </div>
-            </div>
-
-            <!-- Registration Form -->
-            <div id="registerForm" class="auth-container hidden">
-                <h2>Create Account</h2>
-                <form id="registerFormElement">
-                    <div class="form-group">
-                        <label>First Name</label>
-                        <input type="text" id="registerFirstName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Last Name</label>
-                        <input type="text" id="registerLastName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="registerEmail" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="registerPassword" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Grade Level</label>
-                        <select id="registerGrade" required>
-                            <option value="">Select Grade</option>
-                            <option value="1">Grade 1</option>
-                            <option value="2">Grade 2</option>
-                            <option value="3">Grade 3</option>
-                            <option value="4">Grade 4</option>
-                            <option value="5">Grade 5</option>
-                            <option value="6">Grade 6</option>
-                            <option value="7">Grade 7</option>
-                            <option value="8">Grade 8</option>
-                            <option value="9">Grade 9</option>
-                            <option value="10">Grade 10</option>
-                            <option value="11">Grade 11</option>
-                            <option value="12">Grade 12</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Curriculum</label>
-                        <select id="registerCurriculum" required>
-                            <option value="">Select Curriculum</option>
-                            <option value="nigeria">Nigerian Curriculum</option>
-                            <option value="cambridge">Cambridge International</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-full">Create Account</button>
-                </form>
-                <div class="auth-link">
-                    <p>Already have an account? <a href="#" onclick="showAuth('login')">Sign In</a></p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Dashboard -->
-    <div id="dashboard" class="hidden">
-        <div class="container">
-            <div class="dashboard">
-                <div class="dashboard-header">
-                    <h1>Learning Dashboard</h1>
-                    <div class="user-info">
-                        <div class="user-avatar" id="userAvatar">JD</div>
-                        <div>
-                            <div id="userName">John Doe</div>
-                            <div id="userGrade">Grade 10 - Nigerian Curriculum</div>
-                        </div>
-                        <button class="btn btn-secondary" onclick="logout()">Logout</button>
-                    </div>
-                </div>
-
-                <!-- Curriculum Selection -->
-                <div id="curriculumSelection">
-                    <h2>Select Your Learning Path</h2>
-                    <div class="selection-grid">
-                        <div class="selection-card" onclick="selectCurriculum('nigeria')">
-                            <i class="fas fa-graduation-cap"></i>
-                            <h3>Nigerian Curriculum</h3>
-                            <p>WAEC, NECO, JAMB preparation</p>
-                        </div>
-                        <div class="selection-card" onclick="selectCurriculum('cambridge')">
-                            <i class="fas fa-globe"></i>
-                            <h3>Cambridge International</h3>
-                            <p>IGCSE, A-Levels preparation</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Grade Selection -->
-                <div id="gradeSelection" class="hidden">
-                    <h2>Select Your Grade Level</h2>
-                    <div class="selection-grid">
-                        <!-- Grades 1-12 will be populated here -->
-                    </div>
-                </div>
-
-                <!-- Subject Selection -->
-                <div id="subjectSelection" class="hidden">
-                    <h2>Select a Subject</h2>
-                    <div class="selection-grid" id="subjectGrid">
-                        <!-- Subjects will be populated here -->
-                    </div>
-                </div>
-
-                <!-- Topic Selection -->
-                <div id="topicSelection" class="hidden">
-                    <h2>Select a Topic</h2>
-                    <div class="selection-grid" id="topicGrid">
-                        <!-- Topics will be populated here -->
-                    </div>
-                </div>
-
-                <!-- Mode Selection -->
-                <div id="modeSelection" class="hidden">
-                    <h2>Choose Learning Mode</h2>
-                    <div class="selection-grid">
-                        <div class="selection-card" onclick="startPractice()">
-                            <i class="fas fa-book-open"></i>
-                            <h3>Practice Mode</h3>
-                            <p>30 questions with instant feedback</p>
-                        </div>
-                        <div class="selection-card" onclick="startAssessment()">
-                            <i class="fas fa-clipboard-list"></i>
-                            <h3>Assessment Mode</h3>
-                            <p>70 questions - CBT standard</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Question Interface -->
-    <div id="questionInterface" class="hidden">
-        <div class="container">
-            <div class="dashboard">
-                <div class="progress-container">
-                    <div class="progress-bar">
-                        <div class="progress" id="progressBar" style="width: 0%"></div>
-                    </div>
-                    <div class="text-center" id="progressText">Question 1 of 30</div>
-                </div>
-
-                <div class="question-container">
-                    <div class="question-text" id="questionText"></div>
-                    <div class="options-container" id="optionsContainer"></div>
-                </div>
-
-                <div class="navigation">
-                    <button class="btn btn-secondary" onclick="previousQuestion()" id="prevBtn">Previous</button>
-                    <button class="btn btn-primary" onclick="nextQuestion()" id="nextBtn">Next</button>
-                    <button class="btn btn-primary" onclick="submitQuiz()" id="submitBtn" style="display: none">Submit</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Results Page -->
-    <div id="resultsPage" class="hidden">
-        <div class="container">
-            <div class="dashboard">
-                <div class="results-container">
-                    <div class="score-circle" id="scoreCircle">85%</div>
-                    <h2 id="resultsTitle">Practice Completed!</h2>
-                    <p id="resultsDescription">You scored <span id="scoreValue">25</span> out of <span id="totalQuestions">30</span> questions correctly</p>
-                    
-                    <div class="navigation mt-20">
-                        <button class="btn btn-secondary" onclick="showDashboard()">Back to Dashboard</button>
-                        <button class="btn btn-primary" onclick="reviewAnswers()">Review Answers</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Global state
-        const state = {
-            currentUser: null,
-            token: null,
-            currentCurriculum: null,
-            currentGrade: null,
-            currentSubject: null,
-            currentTopic: null,
-            currentMode: null,
-            questions: [],
-            currentQuestionIndex: 0,
-            userAnswers: [],
-            quizStarted: false
-        };
-
-        // API Base URL
-        const API_BASE = 'http://localhost:5000/api';
-
-        // Authentication functions
-        async function registerUser(userData) {
-            try {
-                const response = await fetch(`${API_BASE}/auth/register`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(userData)
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    alert('Registration successful! Please login.');
-                    showAuth('login');
-                } else {
-                    alert('Registration failed: ' + data.error);
+# Real question database with explanations
+QUESTION_DATABASE = {
+    "Mathematics": {
+        "9": {
+            "Algebraic Expressions": [
+                {
+                    "question": "Simplify the expression: 3x + 2y - x + 4y",
+                    "options": ["2x + 6y", "4x + 6y", "2x + 2y", "4x + 2y"],
+                    "correct": 0,
+                    "explanation": "Combine like terms: 3x - x = 2x, 2y + 4y = 6y. Result: 2x + 6y"
+                },
+                {
+                    "question": "Expand: 2(x + 3)",
+                    "options": ["2x + 3", "2x + 5", "2x + 6", "x + 6"],
+                    "correct": 2,
+                    "explanation": "Multiply each term inside parentheses by 2: 2 × x + 2 × 3 = 2x + 6"
+                },
+                {
+                    "question": "Factorize: 4x² - 9",
+                    "options": ["(2x - 3)(2x + 3)", "(4x - 3)(x + 3)", "(2x - 9)(2x + 1)", "(4x - 9)(x + 1)"],
+                    "correct": 0,
+                    "explanation": "This is difference of squares: a² - b² = (a - b)(a + b). Here, 4x² = (2x)² and 9 = 3²"
                 }
-            } catch (error) {
-                alert('Registration error: ' + error.message);
-            }
-        }
-
-        async function loginUser(credentials) {
-            try {
-                const response = await fetch(`${API_BASE}/auth/login`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(credentials)
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    state.token = data.token;
-                    state.currentUser = data.user;
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    showDashboard();
-                    loadUserProfile();
-                } else {
-                    alert('Login failed: ' + data.error);
+            ],
+            "Linear Equations": [
+                {
+                    "question": "Solve for x: 2x + 5 = 13",
+                    "options": ["x = 4", "x = 6", "x = 8", "x = 9"],
+                    "correct": 0,
+                    "explanation": "Subtract 5 from both sides: 2x = 8, then divide by 2: x = 4"
+                },
+                {
+                    "question": "If 3(x - 2) = 15, what is the value of x?",
+                    "options": ["x = 5", "x = 6", "x = 7", "x = 8"],
+                    "correct": 2,
+                    "explanation": "Divide both sides by 3: x - 2 = 5, then add 2: x = 7"
                 }
-            } catch (error) {
-                alert('Login error: ' + error.message);
-            }
-        }
-
-        // Page navigation functions
-        function showAuth(formType) {
-            document.getElementById('welcomePage').classList.add('hidden');
-            document.getElementById('authPage').classList.remove('hidden');
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('registerForm').classList.add('hidden');
-            
-            if (formType === 'login') {
-                document.getElementById('loginForm').classList.remove('hidden');
-            } else {
-                document.getElementById('registerForm').classList.remove('hidden');
-            }
-        }
-
-        function showDashboard() {
-            hideAllPages();
-            document.getElementById('dashboard').classList.remove('hidden');
-            resetSelectionState();
-        }
-
-        function hideAllPages() {
-            const pages = ['welcomePage', 'authPage', 'dashboard', 'questionInterface', 'resultsPage'];
-            pages.forEach(page => document.getElementById(page).classList.add('hidden'));
-        }
-
-        function resetSelectionState() {
-            document.getElementById('curriculumSelection').classList.remove('hidden');
-            document.getElementById('gradeSelection').classList.add('hidden');
-            document.getElementById('subjectSelection').classList.add('hidden');
-            document.getElementById('topicSelection').classList.add('hidden');
-            document.getElementById('modeSelection').classList.add('hidden');
-        }
-
-        // Curriculum and subject selection
-        function selectCurriculum(curriculum) {
-            state.currentCurriculum = curriculum;
-            document.getElementById('curriculumSelection').classList.add('hidden');
-            document.getElementById('gradeSelection').classList.remove('hidden');
-            
-            const gradeGrid = document.getElementById('gradeSelection').querySelector('.selection-grid');
-            gradeGrid.innerHTML = '';
-            
-            for (let grade = 1; grade <= 12; grade++) {
-                gradeGrid.innerHTML += `
-                    <div class="selection-card" onclick="selectGrade(${grade})">
-                        <i class="fas fa-user-graduate"></i>
-                        <h3>Grade ${grade}</h3>
-                        <p>Continue your learning journey</p>
-                    </div>
-                `;
-            }
-        }
-
-        function selectGrade(grade) {
-            state.currentGrade = grade;
-            document.getElementById('gradeSelection').classList.add('hidden');
-            document.getElementById('subjectSelection').classList.remove('hidden');
-            
-            loadSubjects();
-        }
-
-        async function loadSubjects() {
-            try {
-                const response = await fetch(`${API_BASE}/subjects`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${state.token}`
-                    },
-                    body: JSON.stringify({
-                        curriculum: state.currentCurriculum,
-                        grade: state.currentGrade.toString()
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    const subjectGrid = document.getElementById('subjectGrid');
-                    subjectGrid.innerHTML = '';
-                    
-                    data.subjects.forEach(subject => {
-                        subjectGrid.innerHTML += `
-                            <div class="selection-card" onclick="selectSubject('${subject}')">
-                                <i class="fas fa-book"></i>
-                                <h3>${subject}</h3>
-                                <p>Explore ${subject} topics</p>
-                            </div>
-                        `;
-                    });
+            ]
+        },
+        "10": {
+            "Quadratic Functions": [
+                {
+                    "question": "What are the roots of the equation x² - 5x + 6 = 0?",
+                    "options": ["x = 2, 3", "x = 1, 6", "x = -2, -3", "x = -1, -6"],
+                    "correct": 0,
+                    "explanation": "Factorize: (x - 2)(x - 3) = 0, so roots are x = 2 and x = 3"
+                },
+                {
+                    "question": "Find the vertex of the quadratic function f(x) = x² - 4x + 3",
+                    "options": ["(2, -1)", "(1, 0)", "(3, 0)", "(-2, 15)"],
+                    "correct": 0,
+                    "explanation": "Vertex x-coordinate = -b/2a = 4/2 = 2. f(2) = 4 - 8 + 3 = -1. Vertex: (2, -1)"
                 }
-            } catch (error) {
-                alert('Error loading subjects: ' + error.message);
-            }
+            ]
         }
-
-        function selectSubject(subject) {
-            state.currentSubject = subject;
-            document.getElementById('subjectSelection').classList.add('hidden');
-            document.getElementById('topicSelection').classList.remove('hidden');
-            
-            loadTopics();
-        }
-
-        async function loadTopics() {
-            try {
-                const response = await fetch(`${API_BASE}/topics`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${state.token}`
-                    },
-                    body: JSON.stringify({
-                        subject: state.currentSubject,
-                        grade: state.currentGrade.toString()
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    const topicGrid = document.getElementById('topicGrid');
-                    topicGrid.innerHTML = '';
-                    
-                    data.topics.forEach(topic => {
-                        topicGrid.innerHTML += `
-                            <div class="selection-card" onclick="selectTopic('${topic}')">
-                                <i class="fas fa-star"></i>
-                                <h3>${topic}</h3>
-                                <p>Practice ${topic}</p>
-                            </div>
-                        `;
-                    });
+    },
+    "Physics": {
+        "9": {
+            "Laws of Motion": [
+                {
+                    "question": "According to Newton's First Law of Motion, an object will:",
+                    "options": [
+                        "Accelerate if a force is applied",
+                        "Remain at rest or in uniform motion unless acted upon by a net force",
+                        "Always move in a straight line",
+                        "Have constant acceleration"
+                    ],
+                    "correct": 1,
+                    "explanation": "Newton's First Law states that an object at rest stays at rest, and an object in motion stays in motion with the same speed and direction, unless acted upon by an unbalanced force."
+                },
+                {
+                    "question": "What is the SI unit of force?",
+                    "options": ["Joule", "Watt", "Newton", "Pascal"],
+                    "correct": 2,
+                    "explanation": "The SI unit of force is the Newton (N), named after Sir Isaac Newton. 1 N = 1 kg·m/s²"
                 }
-            } catch (error) {
-                alert('Error loading topics: ' + error.message);
-            }
+            ]
         }
-
-        function selectTopic(topic) {
-            state.currentTopic = topic;
-            document.getElementById('topicSelection').classList.add('hidden');
-            document.getElementById('modeSelection').classList.remove('hidden');
-        }
-
-        // Quiz functions
-        async function startPractice() {
-            state.currentMode = 'practice';
-            await loadQuestions();
-        }
-
-        async function startAssessment() {
-            state.currentMode = 'assessment';
-            await loadQuestions();
-        }
-
-        async function loadQuestions() {
-            try {
-                const endpoint = state.currentMode === 'practice' ? 'practice' : 'assessment';
-                const requestBody = state.currentMode === 'practice' ? {
-                    subject: state.currentSubject,
-                    topic: state.currentTopic,
-                    grade: state.currentGrade.toString(),
-                    count: 30
-                } : {
-                    subject: state.currentSubject,
-                    grade: state.currentGrade.toString(),
-                    count: 70
-                };
-
-                const response = await fetch(`${API_BASE}/questions/${endpoint}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${state.token}`
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    state.questions = data.questions;
-                    state.currentQuestionIndex = 0;
-                    state.userAnswers = new Array(data.questions.length).fill(null);
-                    state.quizStarted = true;
-                    
-                    showQuestionInterface();
-                    displayQuestion(0);
+    },
+    "Chemistry": {
+        "9": {
+            "Atomic Structure": [
+                {
+                    "question": "How many electrons can the first shell of an atom hold?",
+                    "options": ["2 electrons", "8 electrons", "18 electrons", "32 electrons"],
+                    "correct": 0,
+                    "explanation": "The first electron shell (K shell) can hold a maximum of 2 electrons according to the 2n² rule where n=1: 2(1)² = 2"
+                },
+                {
+                    "question": "What is the atomic number of an element?",
+                    "options": [
+                        "Number of protons in the nucleus",
+                        "Number of neutrons in the nucleus",
+                        "Total number of protons and neutrons",
+                        "Number of electrons in the outer shell"
+                    ],
+                    "correct": 0,
+                    "explanation": "The atomic number is defined as the number of protons in the nucleus of an atom, which determines the chemical properties of the element."
                 }
-            } catch (error) {
-                alert('Error loading questions: ' + error.message);
-            }
+            ]
         }
-
-        function showQuestionInterface() {
-            hideAllPages();
-            document.getElementById('questionInterface').classList.remove('hidden');
-        }
-
-        function displayQuestion(index) {
-            const question = state.questions[index];
-            document.getElementById('questionText').textContent = question.question;
-            
-            const optionsContainer = document.getElementById('optionsContainer');
-            optionsContainer.innerHTML = '';
-            
-            question.options.forEach((option, optionIndex) => {
-                const optionElement = document.createElement('div');
-                optionElement.className = 'option';
-                if (state.userAnswers[index] === optionIndex) {
-                    optionElement.classList.add('selected');
+    },
+    "Biology": {
+        "9": {
+            "Cell Biology": [
+                {
+                    "question": "Which organelle is known as the 'powerhouse of the cell'?",
+                    "options": ["Nucleus", "Mitochondria", "Ribosome", "Golgi Apparatus"],
+                    "correct": 1,
+                    "explanation": "Mitochondria are called the powerhouse of the cell because they produce ATP through cellular respiration, providing energy for cellular activities."
+                },
+                {
+                    "question": "What is the function of the cell membrane?",
+                    "options": [
+                        "Control center of the cell",
+                        "Site of protein synthesis",
+                        "Regulates what enters and leaves the cell",
+                        "Storage of genetic material"
+                    ],
+                    "correct": 2,
+                    "explanation": "The cell membrane is a selectively permeable barrier that controls the movement of substances in and out of the cell, maintaining homeostasis."
                 }
-                optionElement.textContent = option;
-                optionElement.onclick = () => selectOption(optionIndex);
-                optionsContainer.appendChild(optionElement);
-            });
-            
-            updateProgress();
-            updateNavigationButtons();
+            ]
         }
-
-        function selectOption(optionIndex) {
-            state.userAnswers[state.currentQuestionIndex] = optionIndex;
-            displayQuestion(state.currentQuestionIndex);
-        }
-
-        function updateProgress() {
-            const progress = ((state.currentQuestionIndex + 1) / state.questions.length) * 100;
-            document.getElementById('progressBar').style.width = `${progress}%`;
-            document.getElementById('progressText').textContent = 
-                `Question ${state.currentQuestionIndex + 1} of ${state.questions.length}`;
-        }
-
-        function updateNavigationButtons() {
-            document.getElementById('prevBtn').style.display = 
-                state.currentQuestionIndex > 0 ? 'inline-block' : 'none';
-            
-            if (state.currentQuestionIndex === state.questions.length - 1) {
-                document.getElementById('nextBtn').style.display = 'none';
-                document.getElementById('submitBtn').style.display = 'inline-block';
-            } else {
-                document.getElementById('nextBtn').style.display = 'inline-block';
-                document.getElementById('submitBtn').style.display = 'none';
-            }
-        }
-
-        function previousQuestion() {
-            if (state.currentQuestionIndex > 0) {
-                state.currentQuestionIndex--;
-                displayQuestion(state.currentQuestionIndex);
-            }
-        }
-
-        function nextQuestion() {
-            if (state.currentQuestionIndex < state.questions.length - 1) {
-                state.currentQuestionIndex++;
-                displayQuestion(state.currentQuestionIndex);
-            }
-        }
-
-        async function submitQuiz() {
-            try {
-                const answers = state.questions.map((question, index) => ({
-                    question: question,
-                    answer: state.userAnswers[index]
-                }));
-
-                const response = await fetch(`${API_BASE}/questions/submit`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${state.token}`
-                    },
-                    body: JSON.stringify({
-                        answers: answers,
-                        subject: state.currentSubject,
-                        topic: state.currentTopic,
-                        grade: state.currentGrade.toString(),
-                        mode: state.currentMode
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    showResults(data);
+    },
+    "English Language": {
+        "9": {
+            "Grammar Fundamentals": [
+                {
+                    "question": "Which of the following is a proper noun?",
+                    "options": ["city", "London", "river", "mountain"],
+                    "correct": 1,
+                    "explanation": "A proper noun is the specific name of a particular person, place, or thing. 'London' is a specific city name, so it's a proper noun."
+                },
+                {
+                    "question": "Identify the verb in this sentence: 'The students study diligently every day.'",
+                    "options": ["students", "study", "diligently", "every"],
+                    "correct": 1,
+                    "explanation": "A verb expresses action or state of being. 'Study' is the action being performed by the students."
                 }
-            } catch (error) {
-                alert('Error submitting quiz: ' + error.message);
-            }
+            ]
         }
+    }
+}
 
-        function showResults(data) {
-            hideAllPages();
-            document.getElementById('resultsPage').classList.remove('hidden');
+def get_db_connection():
+    conn = sqlite3.connect(app.config['DATABASE'])
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Authentication Routes
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        first_name = data.get('firstName')
+        last_name = data.get('lastName')
+        grade_level = data.get('gradeLevel')
+        curriculum = data.get('curriculum')
+
+        if not all([email, password, first_name, last_name]):
+            return jsonify({"success": False, "error": "All fields are required"}), 400
+
+        conn = get_db_connection()
+        existing_user = conn.execute(
+            'SELECT id FROM users WHERE email = ?', (email,)
+        ).fetchone()
+
+        if existing_user:
+            conn.close()
+            return jsonify({"success": False, "error": "User already exists"}), 400
+
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+        
+        conn.execute(
+            'INSERT INTO users (email, password, first_name, last_name, grade_level, curriculum) VALUES (?, ?, ?, ?, ?, ?)',
+            (email, hashed_password, first_name, last_name, grade_level, curriculum)
+        )
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": "User registered successfully"
+        }), 201
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        conn = get_db_connection()
+        user = conn.execute(
+            'SELECT * FROM users WHERE email = ?', (email,)
+        ).fetchone()
+        conn.close()
+
+        if user and bcrypt.check_password_hash(user['password'], password):
+            access_token = create_access_token(identity=user['id'])
+            return jsonify({
+                "success": True,
+                "token": access_token,
+                "user": {
+                    "id": user['id'],
+                    "email": user['email'],
+                    "firstName": user['first_name'],
+                    "lastName": user['last_name'],
+                    "gradeLevel": user['grade_level'],
+                    "curriculum": user['curriculum']
+                }
+            })
+        else:
+            return jsonify({"success": False, "error": "Invalid credentials"}), 401
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# Curriculum Routes
+@app.route('/api/curricula', methods=['GET'])
+def get_curricula():
+    return jsonify({
+        "success": True,
+        "curricula": CURRICULA_DATA
+    })
+
+@app.route('/api/subjects', methods=['POST'])
+@jwt_required()
+def get_subjects():
+    try:
+        data = request.get_json()
+        curriculum = data.get('curriculum')
+        grade = data.get('grade')
+
+        if curriculum not in CURRICULA_DATA:
+            return jsonify({"success": False, "error": "Curriculum not found"}), 400
+
+        if grade not in CURRICULA_DATA[curriculum]['grades']:
+            return jsonify({"success": False, "error": "Grade not found in curriculum"}), 400
+
+        subjects = CURRICULA_DATA[curriculum]['grades'][grade]
+        
+        return jsonify({
+            "success": True,
+            "subjects": subjects,
+            "curriculum": curriculum,
+            "grade": grade
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/topics', methods=['POST'])
+@jwt_required()
+def get_topics():
+    try:
+        data = request.get_json()
+        subject = data.get('subject')
+        grade = data.get('grade')
+
+        if subject not in GRADE_TOPICS or grade not in GRADE_TOPICS[subject]:
+            return jsonify({"success": False, "error": "Topics not found for this subject and grade"}), 400
+
+        topics = GRADE_TOPICS[subject][grade]
+        
+        return jsonify({
+            "success": True,
+            "topics": topics,
+            "subject": subject,
+            "grade": grade
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# Question Generation Routes
+@app.route('/api/questions/practice', methods=['POST'])
+@jwt_required()
+def generate_practice_questions():
+    try:
+        data = request.get_json()
+        subject = data.get('subject')
+        topic = data.get('topic')
+        grade = data.get('grade')
+        count = data.get('count', 30)
+
+        # Check if questions exist for this subject, grade, and topic
+        if (subject not in QUESTION_DATABASE or 
+            grade not in QUESTION_DATABASE[subject] or 
+            topic not in QUESTION_DATABASE[subject][grade]):
+            return jsonify({"success": False, "error": "Questions not available for this topic"}), 400
+
+        available_questions = QUESTION_DATABASE[subject][grade][topic]
+        
+        # If we don't have enough questions, repeat some (in a real app, you'd have more questions)
+        selected_questions = []
+        if len(available_questions) >= count:
+            selected_questions = random.sample(available_questions, count)
+        else:
+            # Repeat questions if we don't have enough (for demo purposes)
+            selected_questions = available_questions * (count // len(available_questions))
+            remaining = count % len(available_questions)
+            selected_questions.extend(random.sample(available_questions, remaining))
+        
+        return jsonify({
+            "success": True,
+            "questions": selected_questions,
+            "subject": subject,
+            "topic": topic,
+            "grade": grade,
+            "count": len(selected_questions),
+            "mode": "practice"
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/questions/assessment', methods=['POST'])
+@jwt_required()
+def generate_assessment_questions():
+    try:
+        data = request.get_json()
+        subject = data.get('subject')
+        grade = data.get('grade')
+        count = data.get('count', 70)
+
+        if subject not in QUESTION_DATABASE or grade not in QUESTION_DATABASE[subject]:
+            return jsonify({"success": False, "error": "Assessment questions not available"}), 400
+
+        # Collect all questions from all topics for this subject and grade
+        all_questions = []
+        for topic in QUESTION_DATABASE[subject][grade]:
+            all_questions.extend(QUESTION_DATABASE[subject][grade][topic])
+
+        if len(all_questions) < count:
+            count = len(all_questions)
+
+        selected_questions = random.sample(all_questions, count)
+        
+        # Remove explanations for assessment mode
+        for question in selected_questions:
+            question.pop('explanation', None)
+
+        return jsonify({
+            "success": True,
+            "questions": selected_questions,
+            "subject": subject,
+            "grade": grade,
+            "count": len(selected_questions),
+            "mode": "assessment"
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/questions/submit', methods=['POST'])
+@jwt_required()
+def submit_answers():
+    try:
+        data = request.get_json()
+        user_id = get_jwt_identity()
+        answers = data.get('answers', [])
+        subject = data.get('subject')
+        topic = data.get('topic')
+        grade = data.get('grade')
+        mode = data.get('mode')
+
+        score = 0
+        results = []
+
+        for answer in answers:
+            question_data = answer.get('question')
+            user_answer = answer.get('answer')
             
-            document.getElementById('scoreCircle').textContent = `${data.percentage}%`;
-            document.getElementById('scoreValue').textContent = data.score;
-            document.getElementById('totalQuestions').textContent = data.total;
-            
-            // Store results for review
-            state.quizResults = data;
+            is_correct = (user_answer == question_data['correct'])
+            if is_correct:
+                score += 1
+
+            results.append({
+                'question': question_data['question'],
+                'userAnswer': user_answer,
+                'correctAnswer': question_data['correct'],
+                'isCorrect': is_correct,
+                'explanation': question_data.get('explanation', 'No explanation available')
+            })
+
+        # Update user progress
+        if topic and mode == 'practice':  # Only update progress for practice mode with specific topic
+            conn = get_db_connection()
+            progress = conn.execute(
+                'SELECT * FROM user_progress WHERE user_id = ? AND subject = ? AND topic = ? AND grade_level = ?',
+                (user_id, subject, topic, grade)
+            ).fetchone()
+
+            if progress:
+                conn.execute(
+                    'UPDATE user_progress SET questions_attempted = questions_attempted + ?, questions_correct = questions_correct + ?, last_attempted = CURRENT_TIMESTAMP WHERE id = ?',
+                    (len(answers), score, progress['id'])
+                )
+            else:
+                conn.execute(
+                    'INSERT INTO user_progress (user_id, subject, topic, grade_level, questions_attempted, questions_correct) VALUES (?, ?, ?, ?, ?, ?)',
+                    (user_id, subject, topic, grade, len(answers), score)
+                )
+            conn.commit()
+            conn.close()
+
+        percentage = (score / len(answers)) * 100 if answers else 0
+        
+        return jsonify({
+            "success": True,
+            "score": score,
+            "total": len(answers),
+            "percentage": round(percentage, 2),
+            "results": results,
+            "mode": mode
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/progress', methods=['GET'])
+@jwt_required()
+def get_user_progress():
+    try:
+        user_id = get_jwt_identity()
+        conn = get_db_connection()
+        
+        progress = conn.execute('''
+            SELECT subject, topic, grade_level, questions_attempted, questions_correct, 
+                   last_attempted,
+                   CASE WHEN questions_attempted > 0 
+                        THEN ROUND((questions_correct * 100.0 / questions_attempted), 2)
+                        ELSE 0 
+                   END as accuracy
+            FROM user_progress 
+            WHERE user_id = ?
+            ORDER BY last_attempted DESC
+        ''', (user_id,)).fetchall()
+        
+        conn.close()
+
+        progress_data = []
+        for row in progress:
+            progress_data.append({
+                'subject': row['subject'],
+                'topic': row['topic'],
+                'gradeLevel': row['grade_level'],
+                'questionsAttempted': row['questions_attempted'],
+                'questionsCorrect': row['questions_correct'],
+                'accuracy': row['accuracy'],
+                'lastAttempted': row['last_attempted']
+            })
+
+        return jsonify({
+            "success": True,
+            "progress": progress_data
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/user/profile', methods=['GET'])
+@jwt_required()
+def get_user_profile():
+    try:
+        user_id = get_jwt_identity()
+        conn = get_db_connection()
+        
+        user = conn.execute(
+            'SELECT id, email, first_name, last_name, grade_level, curriculum, created_at FROM users WHERE id = ?',
+            (user_id,)
+        ).fetchone()
+        
+        conn.close()
+
+        if user:
+            return jsonify({
+                "success": True,
+                "user": {
+                    "id": user['id'],
+                    "email": user['email'],
+                    "firstName": user['first_name'],
+                    "lastName": user['last_name'],
+                    "gradeLevel": user['grade_level'],
+                    "curriculum": user['curriculum'],
+                    "joinedDate": user['created_at']
+                }
+            })
+        else:
+            return jsonify({"success": False, "error": "User not found"}), 404
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# Health check and info endpoints
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "success": True,
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "2.0.0"
+    })
+
+@app.route('/')
+def home():
+    return jsonify({
+        "message": "Ideolix Learning Hub API",
+        "version": "2.0.0",
+        "status": "running",
+        "endpoints": {
+            "auth": ["/api/auth/register", "/api/auth/login"],
+            "curriculum": ["/api/curricula", "/api/subjects", "/api/topics"],
+            "questions": ["/api/questions/practice", "/api/questions/assessment", "/api/questions/submit"],
+            "progress": ["/api/progress", "/api/user/profile"]
         }
+    })
 
-        function reviewAnswers() {
-            // Implement answer review functionality
-            alert('Answer review feature coming soon!');
-        }
-
-        function logout() {
-            state.token = null;
-            state.currentUser = null;
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            hideAllPages();
-            document.getElementById('welcomePage').classList.remove('hidden');
-        }
-
-        function loadUserProfile() {
-            if (state.currentUser) {
-                document.getElementById('userName').textContent = 
-                    `${state.currentUser.firstName} ${state.currentUser.lastName}`;
-                document.getElementById('userAvatar').textContent = 
-                    state.currentUser.firstName[0] + state.currentUser.lastName[0];
-                document.getElementById('userGrade').textContent = 
-                    `Grade ${state.currentUser.gradeLevel} - ${getCurriculumName(state.currentUser.curriculum)}`;
-            }
-        }
-
-        function getCurriculumName(curriculum) {
-            const names = {
-                'nigeria': 'Nigerian Curriculum',
-                'cambridge': 'Cambridge International'
-            };
-            return names[curriculum] || curriculum;
-        }
-
-        // Event listeners
-        document.getElementById('registerFormElement').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const userData = {
-                email: document.getElementById('registerEmail').value,
-                password: document.getElementById('registerPassword').value,
-                firstName: document.getElementById('registerFirstName').value,
-                lastName: document.getElementById('registerLastName').value,
-                gradeLevel: parseInt(document.getElementById('registerGrade').value),
-                curriculum: document.getElementById('registerCurriculum').value
-            };
-            registerUser(userData);
-        });
-
-        document.getElementById('loginFormElement').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const credentials = {
-                email: document.getElementById('loginEmail').value,
-                password: document.getElementById('loginPassword').value
-            };
-            loginUser(credentials);
-        });
-
-        // Check for existing session on load
-        window.addEventListener('load', function() {
-            const savedToken = localStorage.getItem('token');
-            const savedUser = localStorage.getItem('user');
-            
-            if (savedToken && savedUser) {
-                state.token = savedToken;
-                state.currentUser = JSON.parse(savedUser);
-                showDashboard();
-                loadUserProfile();
-            }
-        });
-    </script>
-</body>
-</html>
+if __name__ == '__main__':
+    print("🚀 Starting Ideolix Learning Hub API...")
+    print("📚 Available Features:")
+    print("   ✅ User Authentication & Registration")
+    print("   ✅ Multiple Curriculum Support")
+    print("   ✅ Grade 1-12 Comprehensive Coverage")
+    print("   ✅ Practice Mode (30 questions per topic)")
+    print("   ✅ Assessment Mode (70 random questions)")
+    print("   ✅ Real Questions with Explanations")
+    print("   ✅ Progress Tracking")
+    print("   ✅ Instant Feedback")
+    print("\n🌐 Server running on http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000, debug=True)
