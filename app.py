@@ -1,4 +1,4 @@
-# app.py - Complete Robust Learning Platform Backend (Simplified)
+# app.py - Complete Robust Learning Platform Backend (Fixed)
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
@@ -6,7 +6,7 @@ import random
 from datetime import datetime, timedelta
 import hashlib
 import secrets
-import json
+import functools
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
@@ -14,8 +14,7 @@ app.config['DATABASE'] = 'learning_hub.db'
 
 CORS(app)
 
-# Simple authentication storage (in production, use a proper database)
-users_db = {}
+# Simple authentication storage
 sessions = {}
 
 # Database initialization
@@ -57,7 +56,7 @@ def init_db():
 
 init_db()
 
-# Password hashing (simplified)
+# Password hashing
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -66,6 +65,32 @@ def verify_password(password, hashed):
 
 def generate_token():
     return secrets.token_hex(32)
+
+def verify_token(token):
+    """Verify if token is valid"""
+    if token in sessions:
+        # Check if token has expired
+        if datetime.now() < sessions[token]['expires']:
+            return True
+        else:
+            # Remove expired token
+            del sessions[token]
+    return False
+
+def token_required(f):
+    """Decorator to require token authentication"""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token or not token.startswith('Bearer '):
+            return jsonify({"success": False, "error": "Token is missing"}), 401
+        
+        token = token.split(' ')[1]
+        if not verify_token(token):
+            return jsonify({"success": False, "error": "Invalid or expired token"}), 401
+        
+        return f(*args, **kwargs)
+    return decorated
 
 # Comprehensive curricula data with grade-specific subjects
 CURRICULA_DATA = {
@@ -175,18 +200,6 @@ QUESTION_DATABASE = {
                     "options": ["(2x - 3)(2x + 3)", "(4x - 3)(x + 3)", "(2x - 9)(2x + 1)", "(4x - 9)(x + 1)"],
                     "correct": 0,
                     "explanation": "This is difference of squares: a² - b² = (a - b)(a + b). Here, 4x² = (2x)² and 9 = 3²"
-                },
-                {
-                    "question": "Solve for x: 5x - 7 = 3x + 5",
-                    "options": ["x = 6", "x = 4", "x = 5", "x = 7"],
-                    "correct": 0,
-                    "explanation": "Subtract 3x from both sides: 2x - 7 = 5. Add 7 to both sides: 2x = 12. Divide by 2: x = 6"
-                },
-                {
-                    "question": "What is the value of 3a² - 2b when a = 2 and b = 3?",
-                    "options": ["6", "9", "12", "15"],
-                    "correct": 1,
-                    "explanation": "Substitute values: 3(2)² - 2(3) = 3(4) - 6 = 12 - 6 = 6"
                 }
             ],
             "Linear Equations": [
@@ -201,24 +214,6 @@ QUESTION_DATABASE = {
                     "options": ["x = 5", "x = 6", "x = 7", "x = 8"],
                     "correct": 2,
                     "explanation": "Divide both sides by 3: x - 2 = 5, then add 2: x = 7"
-                },
-                {
-                    "question": "Which of these is a linear equation?",
-                    "options": ["x² + 2x + 1 = 0", "2x + 3 = 7", "x³ - 8 = 0", "√x = 4"],
-                    "correct": 1,
-                    "explanation": "A linear equation has the highest power of variable as 1. 2x + 3 = 7 is linear."
-                },
-                {
-                    "question": "Solve the equation: 4(x + 1) = 20",
-                    "options": ["x = 3", "x = 4", "x = 5", "x = 6"],
-                    "correct": 1,
-                    "explanation": "Divide both sides by 4: x + 1 = 5, then subtract 1: x = 4"
-                },
-                {
-                    "question": "What is the solution to 2x - 8 = 0?",
-                    "options": ["x = 2", "x = 4", "x = 6", "x = 8"],
-                    "correct": 1,
-                    "explanation": "Add 8 to both sides: 2x = 8, then divide by 2: x = 4"
                 }
             ]
         },
@@ -235,24 +230,6 @@ QUESTION_DATABASE = {
                     "options": ["(2, -1)", "(1, 0)", "(3, 0)", "(-2, 15)"],
                     "correct": 0,
                     "explanation": "Vertex x-coordinate = -b/2a = 4/2 = 2. f(2) = 4 - 8 + 3 = -1. Vertex: (2, -1)"
-                },
-                {
-                    "question": "What is the discriminant of x² + 4x + 4 = 0?",
-                    "options": ["0", "4", "8", "16"],
-                    "correct": 0,
-                    "explanation": "Discriminant = b² - 4ac = 4² - 4(1)(4) = 16 - 16 = 0"
-                },
-                {
-                    "question": "Solve: 2x² - 8x + 6 = 0",
-                    "options": ["x = 1, 3", "x = 2, 3", "x = 1, 2", "x = 3, 4"],
-                    "correct": 0,
-                    "explanation": "Divide by 2: x² - 4x + 3 = 0. Factor: (x - 1)(x - 3) = 0. Roots: x = 1, 3"
-                },
-                {
-                    "question": "Which quadratic equation has roots 2 and -3?",
-                    "options": ["x² + x - 6 = 0", "x² - x - 6 = 0", "x² + 5x + 6 = 0", "x² - 5x + 6 = 0"],
-                    "correct": 0,
-                    "explanation": "Sum of roots = 2 + (-3) = -1, product = 2 × (-3) = -6. Equation: x² - (sum)x + product = x² + x - 6 = 0"
                 }
             ]
         }
@@ -276,34 +253,6 @@ QUESTION_DATABASE = {
                     "options": ["Joule", "Watt", "Newton", "Pascal"],
                     "correct": 2,
                     "explanation": "The SI unit of force is the Newton (N), named after Sir Isaac Newton. 1 N = 1 kg·m/s²"
-                },
-                {
-                    "question": "Newton's Second Law of Motion states that:",
-                    "options": [
-                        "For every action, there is an equal and opposite reaction",
-                        "Force equals mass times acceleration",
-                        "An object at rest stays at rest",
-                        "Energy cannot be created or destroyed"
-                    ],
-                    "correct": 1,
-                    "explanation": "Newton's Second Law: F = ma, where F is force, m is mass, and a is acceleration."
-                },
-                {
-                    "question": "If a 10 kg object accelerates at 2 m/s², what force is applied?",
-                    "options": ["5 N", "20 N", "50 N", "100 N"],
-                    "correct": 1,
-                    "explanation": "Using F = ma: F = 10 kg × 2 m/s² = 20 N"
-                },
-                {
-                    "question": "Which law explains why you move backward when a car accelerates forward?",
-                    "options": [
-                        "Newton's First Law",
-                        "Newton's Second Law", 
-                        "Newton's Third Law",
-                        "Law of Conservation of Energy"
-                    ],
-                    "correct": 2,
-                    "explanation": "Newton's Third Law: For every action, there is an equal and opposite reaction. The car pushes forward, you push backward."
                 }
             ]
         }
@@ -327,29 +276,6 @@ QUESTION_DATABASE = {
                     ],
                     "correct": 0,
                     "explanation": "The atomic number is defined as the number of protons in the nucleus of an atom, which determines the chemical properties of the element."
-                },
-                {
-                    "question": "Which subatomic particle has a negative charge?",
-                    "options": ["Proton", "Neutron", "Electron", "Positron"],
-                    "correct": 2,
-                    "explanation": "Electrons carry a negative charge, protons carry a positive charge, and neutrons are neutral."
-                },
-                {
-                    "question": "What does the mass number of an atom represent?",
-                    "options": [
-                        "Number of protons only",
-                        "Number of neutrons only", 
-                        "Sum of protons and electrons",
-                        "Sum of protons and neutrons"
-                    ],
-                    "correct": 3,
-                    "explanation": "Mass number = number of protons + number of neutrons. It gives the total mass of the atom."
-                },
-                {
-                    "question": "Isotopes of an element have the same number of:",
-                    "options": ["Protons", "Neutrons", "Electrons", "Nucleons"],
-                    "correct": 0,
-                    "explanation": "Isotopes are atoms of the same element with different numbers of neutrons, but the same number of protons."
                 }
             ]
         }
@@ -373,29 +299,6 @@ QUESTION_DATABASE = {
                     ],
                     "correct": 2,
                     "explanation": "The cell membrane is a selectively permeable barrier that controls the movement of substances in and out of the cell, maintaining homeostasis."
-                },
-                {
-                    "question": "Which organelle contains the cell's genetic material?",
-                    "options": ["Mitochondria", "Ribosome", "Nucleus", "Endoplasmic Reticulum"],
-                    "correct": 2,
-                    "explanation": "The nucleus contains the cell's DNA and controls cellular activities."
-                },
-                {
-                    "question": "What is the function of ribosomes?",
-                    "options": [
-                        "Energy production",
-                        "Protein synthesis",
-                        "Cellular digestion",
-                        "Lipid synthesis"
-                    ],
-                    "correct": 1,
-                    "explanation": "Ribosomes are responsible for protein synthesis, reading mRNA and assembling amino acids into proteins."
-                },
-                {
-                    "question": "Which cell structure is found in plant cells but not animal cells?",
-                    "options": ["Cell membrane", "Mitochondria", "Cell wall", "Nucleus"],
-                    "correct": 2,
-                    "explanation": "Plant cells have a rigid cell wall made of cellulose, which provides structural support. Animal cells lack this feature."
                 }
             ]
         }
@@ -414,29 +317,6 @@ QUESTION_DATABASE = {
                     "options": ["students", "study", "diligently", "every"],
                     "correct": 1,
                     "explanation": "A verb expresses action or state of being. 'Study' is the action being performed by the students."
-                },
-                {
-                    "question": "Which sentence is in the passive voice?",
-                    "options": [
-                        "The cat chased the mouse.",
-                        "The mouse was chased by the cat.",
-                        "She writes a letter every week.",
-                        "They are playing football."
-                    ],
-                    "correct": 1,
-                    "explanation": "Passive voice has the subject receiving the action. 'The mouse was chased by the cat' is passive."
-                },
-                {
-                    "question": "What is the plural form of 'child'?",
-                    "options": ["childs", "childes", "children", "child's"],
-                    "correct": 2,
-                    "explanation": "The plural of 'child' is 'children', which is an irregular plural form."
-                },
-                {
-                    "question": "Which word is an adjective in: 'The beautiful sunset painted the sky.'",
-                    "options": ["beautiful", "sunset", "painted", "sky"],
-                    "correct": 0,
-                    "explanation": "Adjectives describe nouns. 'Beautiful' describes the sunset."
                 }
             ]
         }
@@ -448,13 +328,16 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def verify_token(token):
-    """Verify if token is valid"""
-    return token in sessions
+def get_user_from_token():
+    """Extract user from token"""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token in sessions:
+        return sessions[token]['user_id']
+    return None
 
 # Authentication Routes
 @app.route('/api/auth/register', methods=['POST'])
-def register():
+def register_user():
     try:
         data = request.get_json()
         email = data.get('email')
@@ -512,7 +395,7 @@ def register():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/auth/login', methods=['POST'])
-def login():
+def login_user():
     try:
         data = request.get_json()
         email = data.get('email')
@@ -550,20 +433,6 @@ def login():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-def token_required(f):
-    """Decorator to require token authentication"""
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token or not token.startswith('Bearer '):
-            return jsonify({"success": False, "error": "Token is missing"}), 401
-        
-        token = token.split(' ')[1]
-        if not verify_token(token):
-            return jsonify({"success": False, "error": "Invalid token"}), 401
-        
-        return f(*args, **kwargs)
-    return decorated
-
 # Curriculum Routes
 @app.route('/api/curricula', methods=['GET'])
 def get_curricula():
@@ -574,7 +443,7 @@ def get_curricula():
 
 @app.route('/api/subjects', methods=['POST'])
 @token_required
-def get_subjects():
+def get_subjects_route():
     try:
         data = request.get_json()
         curriculum = data.get('curriculum')
@@ -600,7 +469,7 @@ def get_subjects():
 
 @app.route('/api/topics', methods=['POST'])
 @token_required
-def get_topics():
+def get_topics_route():
     try:
         data = request.get_json()
         subject = data.get('subject')
@@ -704,12 +573,14 @@ def generate_assessment_questions():
 
 @app.route('/api/questions/submit', methods=['POST'])
 @token_required
-def submit_answers():
+def submit_quiz_answers():
     try:
         data = request.get_json()
-        token = request.headers.get('Authorization').split(' ')[1]
-        user_id = sessions[token]['user_id']
+        user_id = get_user_from_token()
         
+        if not user_id:
+            return jsonify({"success": False, "error": "Invalid token"}), 401
+            
         answers = data.get('answers', [])
         subject = data.get('subject')
         topic = data.get('topic')
@@ -774,9 +645,10 @@ def submit_answers():
 @token_required
 def get_user_progress():
     try:
-        token = request.headers.get('Authorization').split(' ')[1]
-        user_id = sessions[token]['user_id']
-        
+        user_id = get_user_from_token()
+        if not user_id:
+            return jsonify({"success": False, "error": "Invalid token"}), 401
+            
         conn = get_db_connection()
         
         progress = conn.execute('''
@@ -817,9 +689,10 @@ def get_user_progress():
 @token_required
 def get_user_profile():
     try:
-        token = request.headers.get('Authorization').split(' ')[1]
-        user_id = sessions[token]['user_id']
-        
+        user_id = get_user_from_token()
+        if not user_id:
+            return jsonify({"success": False, "error": "Invalid token"}), 401
+            
         conn = get_db_connection()
         
         user = conn.execute(
