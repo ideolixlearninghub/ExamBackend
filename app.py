@@ -1,21 +1,22 @@
-# app.py - Complete Robust Learning Platform Backend
+# app.py - Complete Robust Learning Platform Backend (Simplified)
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import sqlite3
 import random
 from datetime import datetime, timedelta
-import os
+import hashlib
+import secrets
+import json
 
 app = Flask(__name__)
-app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 app.config['DATABASE'] = 'learning_hub.db'
 
 CORS(app)
-bcrypt = Bcrypt(app)
-jwt = JWTManager(app)
+
+# Simple authentication storage (in production, use a proper database)
+users_db = {}
+sessions = {}
 
 # Database initialization
 def init_db():
@@ -55,6 +56,16 @@ def init_db():
     conn.close()
 
 init_db()
+
+# Password hashing (simplified)
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, hashed):
+    return hash_password(password) == hashed
+
+def generate_token():
+    return secrets.token_hex(32)
 
 # Comprehensive curricula data with grade-specific subjects
 CURRICULA_DATA = {
@@ -97,87 +108,48 @@ CURRICULA_DATA = {
 # Comprehensive grade-specific topics for each subject
 GRADE_TOPICS = {
     "Mathematics": {
-        "1": [
-            "Counting Numbers 1-50", "Number Recognition", "Basic Addition", "Basic Subtraction", 
-            "Simple Shapes", "Comparing Numbers", "Measurement Basics", "Time - Hours", 
-            "Money - Identifying Coins", "Patterns", "Sorting Objects", "Position Words",
-            "Data Collection", "Simple Graphs", "Problem Solving Basics"
-        ],
-        "2": [
-            "Numbers 1-100", "Addition Facts", "Subtraction Facts", "Place Value", 
-            "Measurement - Length", "Time - Half Hours", "Money - Counting Coins", 
-            "2D Shapes", "Simple Fractions", "Word Problems", "Calendar Skills", 
-            "Temperature Basics", "Symmetry", "Data Interpretation", "Mental Math"
-        ],
-        "9": [
-            "Algebraic Expressions", "Linear Equations", "Quadratic Equations", "Geometry - Angles",
-            "Trigonometry Basics", "Statistics - Mean, Median, Mode", "Probability", 
-            "Coordinate Geometry", "Functions", "Sets Theory", "Number Systems",
-            "Polynomials", "Factorization", "Simultaneous Equations", "Mathematical Reasoning"
-        ],
-        "10": [
-            "Quadratic Functions", "Trigonometric Ratios", "Circle Geometry", "Statistics Advanced",
-            "Probability Distributions", "Sequences and Series", "Coordinate Geometry Advanced",
-            "Functions and Graphs", "Calculus Basics", "Vectors", "Matrices",
-            "Financial Mathematics", "3D Geometry", "Algebraic Fractions", "Inequalities"
-        ]
+        "1": ["Counting Numbers 1-50", "Number Recognition", "Basic Addition", "Basic Subtraction", "Simple Shapes", "Comparing Numbers", "Measurement Basics", "Time - Hours", "Money - Identifying Coins", "Patterns", "Sorting Objects", "Position Words", "Data Collection", "Simple Graphs", "Problem Solving Basics"],
+        "2": ["Numbers 1-100", "Addition Facts", "Subtraction Facts", "Place Value", "Measurement - Length", "Time - Half Hours", "Money - Counting Coins", "2D Shapes", "Simple Fractions", "Word Problems", "Calendar Skills", "Temperature Basics", "Symmetry", "Data Interpretation", "Mental Math"],
+        "3": ["Multiplication Basics", "Division Basics", "Fractions", "Measurement - Weight", "Time - Quarter Hours", "Money - Making Change", "Perimeter", "Area Basics", "Graphs and Charts", "Problem Solving Strategies", "Geometry - 3D Shapes", "Patterns and Sequences", "Estimation", "Mental Math Strategies", "Mathematical Vocabulary"],
+        "4": ["Multi-digit Multiplication", "Long Division", "Fractions and Decimals", "Measurement - Volume", "Time - Minutes and Seconds", "Money - Word Problems", "Geometry - Angles", "Area and Perimeter", "Data Analysis", "Factors and Multiples", "Roman Numerals", "Coordinate Grids", "Problem Solving", "Mathematical Reasoning", "Measurement Conversion"],
+        "5": ["Fractions Operations", "Decimal Operations", "Percentage Basics", "Geometry - Triangles", "Measurement - Metric System", "Graphs - Line Graphs", "Algebraic Thinking", "Volume", "Statistics Basics", "Ratio and Proportion", "Integers", "Geometry - Circles", "Word Problems Advanced", "Mathematical Patterns", "Logical Reasoning"],
+        "6": ["Algebra Basics", "Ratio and Proportion", "Percentage Applications", "Geometry - Polygons", "Statistics - Mean, Median", "Probability Basics", "Integers Operations", "Coordinate Geometry", "Measurement - Advanced", "Data Interpretation", "Financial Mathematics", "Geometry - Transformations", "Problem Solving", "Mathematical Proofs", "Number Theory"],
+        "7": ["Algebraic Expressions", "Linear Equations", "Geometry - Congruence", "Statistics - Probability", "Ratio and Proportion Advanced", "Percentage Advanced", "Number Systems", "Geometry - Similarity", "Data Analysis", "Mathematical Modeling", "Functions Basics", "Geometry - Pythagorean Theorem", "Problem Solving", "Mathematical Communication", "Algebraic Manipulation"],
+        "8": ["Linear Equations Advanced", "Quadratic Equations Basics", "Geometry - Trigonometry", "Statistics - Distributions", "Functions and Graphs", "Coordinate Geometry Advanced", "Number Theory", "Geometry - 3D Shapes", "Probability Advanced", "Algebraic Fractions", "Mathematical Reasoning", "Problem Solving Strategies", "Geometry - Circles Advanced", "Sequences and Series", "Mathematical Proofs"],
+        "9": ["Algebraic Expressions", "Linear Equations", "Quadratic Equations", "Geometry - Angles", "Trigonometry Basics", "Statistics - Mean, Median, Mode", "Probability", "Coordinate Geometry", "Functions", "Sets Theory", "Number Systems", "Polynomials", "Factorization", "Simultaneous Equations", "Mathematical Reasoning"],
+        "10": ["Quadratic Functions", "Trigonometric Ratios", "Circle Geometry", "Statistics Advanced", "Probability Distributions", "Sequences and Series", "Coordinate Geometry Advanced", "Functions and Graphs", "Calculus Basics", "Vectors", "Matrices", "Financial Mathematics", "3D Geometry", "Algebraic Fractions", "Inequalities"],
+        "11": ["Calculus - Differentiation", "Calculus - Integration", "Trigonometric Functions", "Exponential and Logarithmic Functions", "Complex Numbers", "Permutations and Combinations", "Binomial Theorem", "3D Coordinate Geometry", "Differential Equations", "Mathematical Induction", "Vector Algebra", "Probability Distributions", "Statistical Inference", "Linear Programming", "Numerical Methods"],
+        "12": ["Advanced Calculus", "Multivariable Calculus", "Differential Equations Advanced", "Complex Analysis", "Linear Algebra", "Group Theory", "Real Analysis", "Numerical Analysis", "Mathematical Modeling", "Game Theory", "Topology Basics", "Fourier Series", "Laplace Transforms", "Probability Theory", "Statistical Methods"]
     },
     "Physics": {
-        "9": [
-            "Measurement and Units", "Motion in Straight Line", "Laws of Motion", "Work, Energy and Power",
-            "Gravitation", "Properties of Matter", "Heat and Temperature", "Wave Motion",
-            "Sound Waves", "Light - Reflection", "Light - Refraction", "Electric Current",
-            "Magnetism", "Electromagnetism", "Nuclear Physics Basics"
-        ],
-        "10": [
-            "Kinematics", "Dynamics", "Circular Motion", "Oscillations", "Thermal Physics",
-            "Wave Optics", "Electrostatics", "Current Electricity", "Magnetic Effects",
-            "Electromagnetic Induction", "AC Circuits", "Semiconductor Devices",
-            "Communication Systems", "Modern Physics", "Astrophysics Basics"
-        ]
+        "9": ["Measurement and Units", "Motion in Straight Line", "Laws of Motion", "Work, Energy and Power", "Gravitation", "Properties of Matter", "Heat and Temperature", "Wave Motion", "Sound Waves", "Light - Reflection", "Light - Refraction", "Electric Current", "Magnetism", "Electromagnetism", "Nuclear Physics Basics"],
+        "10": ["Kinematics", "Dynamics", "Circular Motion", "Oscillations", "Thermal Physics", "Wave Optics", "Electrostatics", "Current Electricity", "Magnetic Effects", "Electromagnetic Induction", "AC Circuits", "Semiconductor Devices", "Communication Systems", "Modern Physics", "Astrophysics Basics"],
+        "11": ["Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy and Power", "Motion of System of Particles", "Gravitation", "Properties of Bulk Matter", "Thermodynamics", "Behavior of Perfect Gas", "Oscillations and Waves", "Electrostatics", "Current Electricity", "Magnetic Effects of Current", "Electromagnetic Induction", "Alternating Current"],
+        "12": ["Electrostatics", "Current Electricity", "Magnetic Effects of Current", "Electromagnetic Induction", "Alternating Current", "Electromagnetic Waves", "Optics", "Dual Nature of Matter", "Atoms and Nuclei", "Electronic Devices", "Communication Systems", "Experimental Skills", "Modern Physics", "Semiconductor Electronics", "Principles of Communication"]
     },
     "Chemistry": {
-        "9": [
-            "Matter and Its Composition", "Atomic Structure", "Periodic Table", "Chemical Bonding",
-            "States of Matter", "Solutions", "Acids, Bases and Salts", "Chemical Reactions",
-            "Metals and Non-metals", "Carbon Compounds", "Environmental Chemistry",
-            "Basic Laboratory Techniques", "Stoichiometry", "Redox Reactions", "Water Chemistry"
-        ],
-        "10": [
-            "Chemical Kinetics", "Chemical Equilibrium", "Ionic Equilibrium", "Thermodynamics",
-            "Electrochemistry", "Surface Chemistry", "Coordination Compounds", "Hydrocarbons",
-            "Haloalkanes and Haloarenes", "Alcohols, Phenols and Ethers", "Aldehydes and Ketones",
-            "Carboxylic Acids", "Organic Nitrogen Compounds", "Biomolecules", "Polymers"
-        ]
+        "9": ["Matter and Its Composition", "Atomic Structure", "Periodic Table", "Chemical Bonding", "States of Matter", "Solutions", "Acids, Bases and Salts", "Chemical Reactions", "Metals and Non-metals", "Carbon Compounds", "Environmental Chemistry", "Basic Laboratory Techniques", "Stoichiometry", "Redox Reactions", "Water Chemistry"],
+        "10": ["Chemical Kinetics", "Chemical Equilibrium", "Ionic Equilibrium", "Thermodynamics", "Electrochemistry", "Surface Chemistry", "Coordination Compounds", "Hydrocarbons", "Haloalkanes and Haloarenes", "Alcohols, Phenols and Ethers", "Aldehydes and Ketones", "Carboxylic Acids", "Organic Nitrogen Compounds", "Biomolecules", "Polymers"],
+        "11": ["Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements", "Chemical Bonding", "States of Matter", "Thermodynamics", "Equilibrium", "Redox Reactions", "Hydrogen", "s-Block Elements", "p-Block Elements", "Organic Chemistry", "Hydrocarbons", "Environmental Chemistry", "Practical Chemistry"],
+        "12": ["Solid State", "Solutions", "Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "General Principles of Metallurgy", "p-Block Elements", "d and f Block Elements", "Coordination Compounds", "Haloalkanes and Haloarenes", "Alcohols, Phenols and Ethers", "Aldehydes, Ketones and Carboxylic Acids", "Organic Compounds", "Biomolecules", "Chemistry in Everyday Life"]
     },
     "Biology": {
-        "9": [
-            "Cell Biology", "Tissues", "Plant Physiology", "Human Physiology - Digestion",
-            "Human Physiology - Respiration", "Human Physiology - Circulation", "Human Physiology - Excretion",
-            "Human Physiology - Nervous System", "Reproduction in Plants", "Reproduction in Humans",
-            "Genetics and Evolution", "Health and Diseases", "Ecosystem", "Biodiversity",
-            "Environmental Issues"
-        ],
-        "10": [
-            "Molecular Biology", "Genetics Advanced", "Evolutionary Biology", "Human Physiology Advanced",
-            "Plant Physiology Advanced", "Biotechnology", "Microbiology", "Immunology",
-            "Ecology Advanced", "Animal Behavior", "Developmental Biology", "Bioinformatics",
-            "Genetic Engineering", "Conservation Biology", "Medical Biology"
-        ]
+        "9": ["Cell Biology", "Tissues", "Plant Physiology", "Human Physiology - Digestion", "Human Physiology - Respiration", "Human Physiology - Circulation", "Human Physiology - Excretion", "Human Physiology - Nervous System", "Reproduction in Plants", "Reproduction in Humans", "Genetics and Evolution", "Health and Diseases", "Ecosystem", "Biodiversity", "Environmental Issues"],
+        "10": ["Molecular Biology", "Genetics Advanced", "Evolutionary Biology", "Human Physiology Advanced", "Plant Physiology Advanced", "Biotechnology", "Microbiology", "Immunology", "Ecology Advanced", "Animal Behavior", "Developmental Biology", "Bioinformatics", "Genetic Engineering", "Conservation Biology", "Medical Biology"],
+        "11": ["Diversity in Living World", "Structural Organization", "Cell Structure and Function", "Plant Physiology", "Human Physiology", "Reproduction", "Genetics and Evolution", "Biology and Human Welfare", "Biotechnology", "Ecology and Environment", "Human Health and Diseases", "Microbes in Human Welfare", "Principles of Inheritance", "Molecular Basis of Inheritance", "Evolution"],
+        "12": ["Reproduction in Organisms", "Sexual Reproduction", "Genetics and Evolution", "Biology and Human Welfare", "Biotechnology", "Ecology", "Environmental Issues", "Strategies for Enhancement", "Microbes in Human Welfare", "Organisms and Populations", "Ecosystem", "Biodiversity and Conservation", "Human Reproduction", "Reproductive Health", "Principles of Biotechnology"]
     },
     "English Language": {
-        "9": [
-            "Grammar Fundamentals", "Sentence Structure", "Parts of Speech", "Tenses",
-            "Punctuation", "Vocabulary Building", "Reading Comprehension", "Essay Writing",
-            "Letter Writing", "Report Writing", "Creative Writing", "Poetry Analysis",
-            "Prose Comprehension", "Drama Interpretation", "Oral English"
-        ],
-        "10": [
-            "Advanced Grammar", "Syntax and Semantics", "Phonetics", "Summary Writing",
-            "Argumentative Essays", "Descriptive Writing", "Narrative Writing", "Literary Devices",
-            "Figures of Speech", "Comprehension Skills", "Vocabulary Enhancement", "Formal Letters",
-            "Informal Letters", "Speech Writing", "Debate and Discussion"
-        ]
+        "9": ["Grammar Fundamentals", "Sentence Structure", "Parts of Speech", "Tenses", "Punctuation", "Vocabulary Building", "Reading Comprehension", "Essay Writing", "Letter Writing", "Report Writing", "Creative Writing", "Poetry Analysis", "Prose Comprehension", "Drama Interpretation", "Oral English"],
+        "10": ["Advanced Grammar", "Syntax and Semantics", "Phonetics", "Summary Writing", "Argumentative Essays", "Descriptive Writing", "Narrative Writing", "Literary Devices", "Figures of Speech", "Comprehension Skills", "Vocabulary Enhancement", "Formal Letters", "Informal Letters", "Speech Writing", "Debate and Discussion"],
+        "11": ["Advanced Composition", "Critical Analysis", "Literary Criticism", "Advanced Vocabulary", "Rhetorical Devices", "Research Writing", "Creative Writing Advanced", "Poetry Analysis Advanced", "Prose Analysis", "Drama Analysis", "Linguistics Basics", "Sociolinguistics", "Psycholinguistics", "Academic Writing", "Professional Communication"],
+        "12": ["Advanced Literary Analysis", "Critical Theory", "Research Methodology", "Academic Writing Advanced", "Professional Communication", "Media Studies", "Digital Literacy", "Cross-cultural Communication", "Stylistics", "Discourse Analysis", "Translation Studies", "World Literature", "Contemporary Issues", "Ethical Communication", "Career Preparation"]
+    },
+    "Computer Science": {
+        "9": ["Computer Fundamentals", "Operating Systems", "Word Processing", "Spreadsheets", "Presentation Software", "Internet Basics", "Email Communication", "Computer Hardware", "Software Concepts", "Programming Basics", "Algorithm Design", "Flowcharts", "HTML Basics", "Cyber Safety", "Digital Citizenship"],
+        "10": ["Programming in Python", "Data Structures", "Database Management", "Web Development", "Computer Networks", "Cyber Security", "Software Development", "Mobile App Development", "Cloud Computing", "Artificial Intelligence", "Machine Learning", "Data Science", "Internet of Things", "Blockchain Basics", "Ethical Hacking"],
+        "11": ["Computer Systems", "Boolean Algebra", "Number Systems", "Microprocessors", "Data Representation", "Python Programming", "Database Concepts", "SQL", "Computer Networks", "Web Development", "Cyber Security", "Society Law and Ethics", "Computational Thinking", "Problem Solving", "Software Engineering"],
+        "12": ["Object Oriented Programming", "Data Structures", "Database Management", "Boolean Algebra", "Computer Networks", "Web Technologies", "Cyber Security", "Society Law and Ethics", "Computational Thinking", "Problem Solving", "Software Engineering", "Mobile Applications", "Cloud Computing", "Artificial Intelligence", "Project Development"]
     }
 }
 
@@ -203,6 +175,18 @@ QUESTION_DATABASE = {
                     "options": ["(2x - 3)(2x + 3)", "(4x - 3)(x + 3)", "(2x - 9)(2x + 1)", "(4x - 9)(x + 1)"],
                     "correct": 0,
                     "explanation": "This is difference of squares: a² - b² = (a - b)(a + b). Here, 4x² = (2x)² and 9 = 3²"
+                },
+                {
+                    "question": "Solve for x: 5x - 7 = 3x + 5",
+                    "options": ["x = 6", "x = 4", "x = 5", "x = 7"],
+                    "correct": 0,
+                    "explanation": "Subtract 3x from both sides: 2x - 7 = 5. Add 7 to both sides: 2x = 12. Divide by 2: x = 6"
+                },
+                {
+                    "question": "What is the value of 3a² - 2b when a = 2 and b = 3?",
+                    "options": ["6", "9", "12", "15"],
+                    "correct": 1,
+                    "explanation": "Substitute values: 3(2)² - 2(3) = 3(4) - 6 = 12 - 6 = 6"
                 }
             ],
             "Linear Equations": [
@@ -217,6 +201,24 @@ QUESTION_DATABASE = {
                     "options": ["x = 5", "x = 6", "x = 7", "x = 8"],
                     "correct": 2,
                     "explanation": "Divide both sides by 3: x - 2 = 5, then add 2: x = 7"
+                },
+                {
+                    "question": "Which of these is a linear equation?",
+                    "options": ["x² + 2x + 1 = 0", "2x + 3 = 7", "x³ - 8 = 0", "√x = 4"],
+                    "correct": 1,
+                    "explanation": "A linear equation has the highest power of variable as 1. 2x + 3 = 7 is linear."
+                },
+                {
+                    "question": "Solve the equation: 4(x + 1) = 20",
+                    "options": ["x = 3", "x = 4", "x = 5", "x = 6"],
+                    "correct": 1,
+                    "explanation": "Divide both sides by 4: x + 1 = 5, then subtract 1: x = 4"
+                },
+                {
+                    "question": "What is the solution to 2x - 8 = 0?",
+                    "options": ["x = 2", "x = 4", "x = 6", "x = 8"],
+                    "correct": 1,
+                    "explanation": "Add 8 to both sides: 2x = 8, then divide by 2: x = 4"
                 }
             ]
         },
@@ -233,6 +235,24 @@ QUESTION_DATABASE = {
                     "options": ["(2, -1)", "(1, 0)", "(3, 0)", "(-2, 15)"],
                     "correct": 0,
                     "explanation": "Vertex x-coordinate = -b/2a = 4/2 = 2. f(2) = 4 - 8 + 3 = -1. Vertex: (2, -1)"
+                },
+                {
+                    "question": "What is the discriminant of x² + 4x + 4 = 0?",
+                    "options": ["0", "4", "8", "16"],
+                    "correct": 0,
+                    "explanation": "Discriminant = b² - 4ac = 4² - 4(1)(4) = 16 - 16 = 0"
+                },
+                {
+                    "question": "Solve: 2x² - 8x + 6 = 0",
+                    "options": ["x = 1, 3", "x = 2, 3", "x = 1, 2", "x = 3, 4"],
+                    "correct": 0,
+                    "explanation": "Divide by 2: x² - 4x + 3 = 0. Factor: (x - 1)(x - 3) = 0. Roots: x = 1, 3"
+                },
+                {
+                    "question": "Which quadratic equation has roots 2 and -3?",
+                    "options": ["x² + x - 6 = 0", "x² - x - 6 = 0", "x² + 5x + 6 = 0", "x² - 5x + 6 = 0"],
+                    "correct": 0,
+                    "explanation": "Sum of roots = 2 + (-3) = -1, product = 2 × (-3) = -6. Equation: x² - (sum)x + product = x² + x - 6 = 0"
                 }
             ]
         }
@@ -256,6 +276,34 @@ QUESTION_DATABASE = {
                     "options": ["Joule", "Watt", "Newton", "Pascal"],
                     "correct": 2,
                     "explanation": "The SI unit of force is the Newton (N), named after Sir Isaac Newton. 1 N = 1 kg·m/s²"
+                },
+                {
+                    "question": "Newton's Second Law of Motion states that:",
+                    "options": [
+                        "For every action, there is an equal and opposite reaction",
+                        "Force equals mass times acceleration",
+                        "An object at rest stays at rest",
+                        "Energy cannot be created or destroyed"
+                    ],
+                    "correct": 1,
+                    "explanation": "Newton's Second Law: F = ma, where F is force, m is mass, and a is acceleration."
+                },
+                {
+                    "question": "If a 10 kg object accelerates at 2 m/s², what force is applied?",
+                    "options": ["5 N", "20 N", "50 N", "100 N"],
+                    "correct": 1,
+                    "explanation": "Using F = ma: F = 10 kg × 2 m/s² = 20 N"
+                },
+                {
+                    "question": "Which law explains why you move backward when a car accelerates forward?",
+                    "options": [
+                        "Newton's First Law",
+                        "Newton's Second Law", 
+                        "Newton's Third Law",
+                        "Law of Conservation of Energy"
+                    ],
+                    "correct": 2,
+                    "explanation": "Newton's Third Law: For every action, there is an equal and opposite reaction. The car pushes forward, you push backward."
                 }
             ]
         }
@@ -279,6 +327,29 @@ QUESTION_DATABASE = {
                     ],
                     "correct": 0,
                     "explanation": "The atomic number is defined as the number of protons in the nucleus of an atom, which determines the chemical properties of the element."
+                },
+                {
+                    "question": "Which subatomic particle has a negative charge?",
+                    "options": ["Proton", "Neutron", "Electron", "Positron"],
+                    "correct": 2,
+                    "explanation": "Electrons carry a negative charge, protons carry a positive charge, and neutrons are neutral."
+                },
+                {
+                    "question": "What does the mass number of an atom represent?",
+                    "options": [
+                        "Number of protons only",
+                        "Number of neutrons only", 
+                        "Sum of protons and electrons",
+                        "Sum of protons and neutrons"
+                    ],
+                    "correct": 3,
+                    "explanation": "Mass number = number of protons + number of neutrons. It gives the total mass of the atom."
+                },
+                {
+                    "question": "Isotopes of an element have the same number of:",
+                    "options": ["Protons", "Neutrons", "Electrons", "Nucleons"],
+                    "correct": 0,
+                    "explanation": "Isotopes are atoms of the same element with different numbers of neutrons, but the same number of protons."
                 }
             ]
         }
@@ -302,6 +373,29 @@ QUESTION_DATABASE = {
                     ],
                     "correct": 2,
                     "explanation": "The cell membrane is a selectively permeable barrier that controls the movement of substances in and out of the cell, maintaining homeostasis."
+                },
+                {
+                    "question": "Which organelle contains the cell's genetic material?",
+                    "options": ["Mitochondria", "Ribosome", "Nucleus", "Endoplasmic Reticulum"],
+                    "correct": 2,
+                    "explanation": "The nucleus contains the cell's DNA and controls cellular activities."
+                },
+                {
+                    "question": "What is the function of ribosomes?",
+                    "options": [
+                        "Energy production",
+                        "Protein synthesis",
+                        "Cellular digestion",
+                        "Lipid synthesis"
+                    ],
+                    "correct": 1,
+                    "explanation": "Ribosomes are responsible for protein synthesis, reading mRNA and assembling amino acids into proteins."
+                },
+                {
+                    "question": "Which cell structure is found in plant cells but not animal cells?",
+                    "options": ["Cell membrane", "Mitochondria", "Cell wall", "Nucleus"],
+                    "correct": 2,
+                    "explanation": "Plant cells have a rigid cell wall made of cellulose, which provides structural support. Animal cells lack this feature."
                 }
             ]
         }
@@ -320,6 +414,29 @@ QUESTION_DATABASE = {
                     "options": ["students", "study", "diligently", "every"],
                     "correct": 1,
                     "explanation": "A verb expresses action or state of being. 'Study' is the action being performed by the students."
+                },
+                {
+                    "question": "Which sentence is in the passive voice?",
+                    "options": [
+                        "The cat chased the mouse.",
+                        "The mouse was chased by the cat.",
+                        "She writes a letter every week.",
+                        "They are playing football."
+                    ],
+                    "correct": 1,
+                    "explanation": "Passive voice has the subject receiving the action. 'The mouse was chased by the cat' is passive."
+                },
+                {
+                    "question": "What is the plural form of 'child'?",
+                    "options": ["childs", "childes", "children", "child's"],
+                    "correct": 2,
+                    "explanation": "The plural of 'child' is 'children', which is an irregular plural form."
+                },
+                {
+                    "question": "Which word is an adjective in: 'The beautiful sunset painted the sky.'",
+                    "options": ["beautiful", "sunset", "painted", "sky"],
+                    "correct": 0,
+                    "explanation": "Adjectives describe nouns. 'Beautiful' describes the sunset."
                 }
             ]
         }
@@ -330,6 +447,10 @@ def get_db_connection():
     conn = sqlite3.connect(app.config['DATABASE'])
     conn.row_factory = sqlite3.Row
     return conn
+
+def verify_token(token):
+    """Verify if token is valid"""
+    return token in sessions
 
 # Authentication Routes
 @app.route('/api/auth/register', methods=['POST'])
@@ -355,18 +476,36 @@ def register():
             conn.close()
             return jsonify({"success": False, "error": "User already exists"}), 400
 
-        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+        hashed_password = hash_password(password)
         
-        conn.execute(
+        cursor = conn.execute(
             'INSERT INTO users (email, password, first_name, last_name, grade_level, curriculum) VALUES (?, ?, ?, ?, ?, ?)',
             (email, hashed_password, first_name, last_name, grade_level, curriculum)
         )
+        user_id = cursor.lastrowid
         conn.commit()
         conn.close()
 
+        # Generate token
+        token = generate_token()
+        sessions[token] = {
+            'user_id': user_id,
+            'email': email,
+            'expires': datetime.now() + timedelta(hours=24)
+        }
+
         return jsonify({
             "success": True,
-            "message": "User registered successfully"
+            "message": "User registered successfully",
+            "token": token,
+            "user": {
+                "id": user_id,
+                "email": email,
+                "firstName": first_name,
+                "lastName": last_name,
+                "gradeLevel": grade_level,
+                "curriculum": curriculum
+            }
         }), 201
 
     except Exception as e:
@@ -385,11 +524,17 @@ def login():
         ).fetchone()
         conn.close()
 
-        if user and bcrypt.check_password_hash(user['password'], password):
-            access_token = create_access_token(identity=user['id'])
+        if user and verify_password(password, user['password']):
+            token = generate_token()
+            sessions[token] = {
+                'user_id': user['id'],
+                'email': email,
+                'expires': datetime.now() + timedelta(hours=24)
+            }
+            
             return jsonify({
                 "success": True,
-                "token": access_token,
+                "token": token,
                 "user": {
                     "id": user['id'],
                     "email": user['email'],
@@ -405,6 +550,20 @@ def login():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+def token_required(f):
+    """Decorator to require token authentication"""
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token or not token.startswith('Bearer '):
+            return jsonify({"success": False, "error": "Token is missing"}), 401
+        
+        token = token.split(' ')[1]
+        if not verify_token(token):
+            return jsonify({"success": False, "error": "Invalid token"}), 401
+        
+        return f(*args, **kwargs)
+    return decorated
+
 # Curriculum Routes
 @app.route('/api/curricula', methods=['GET'])
 def get_curricula():
@@ -414,7 +573,7 @@ def get_curricula():
     })
 
 @app.route('/api/subjects', methods=['POST'])
-@jwt_required()
+@token_required
 def get_subjects():
     try:
         data = request.get_json()
@@ -440,7 +599,7 @@ def get_subjects():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/topics', methods=['POST'])
-@jwt_required()
+@token_required
 def get_topics():
     try:
         data = request.get_json()
@@ -464,7 +623,7 @@ def get_topics():
 
 # Question Generation Routes
 @app.route('/api/questions/practice', methods=['POST'])
-@jwt_required()
+@token_required
 def generate_practice_questions():
     try:
         data = request.get_json()
@@ -481,15 +640,16 @@ def generate_practice_questions():
 
         available_questions = QUESTION_DATABASE[subject][grade][topic]
         
-        # If we don't have enough questions, repeat some (in a real app, you'd have more questions)
+        # If we don't have enough questions, repeat some
         selected_questions = []
         if len(available_questions) >= count:
             selected_questions = random.sample(available_questions, count)
         else:
-            # Repeat questions if we don't have enough (for demo purposes)
+            # Repeat questions if we don't have enough
             selected_questions = available_questions * (count // len(available_questions))
             remaining = count % len(available_questions)
-            selected_questions.extend(random.sample(available_questions, remaining))
+            if remaining > 0:
+                selected_questions.extend(random.sample(available_questions, remaining))
         
         return jsonify({
             "success": True,
@@ -505,7 +665,7 @@ def generate_practice_questions():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/questions/assessment', methods=['POST'])
-@jwt_required()
+@token_required
 def generate_assessment_questions():
     try:
         data = request.get_json()
@@ -543,11 +703,13 @@ def generate_assessment_questions():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/questions/submit', methods=['POST'])
-@jwt_required()
+@token_required
 def submit_answers():
     try:
         data = request.get_json()
-        user_id = get_jwt_identity()
+        token = request.headers.get('Authorization').split(' ')[1]
+        user_id = sessions[token]['user_id']
+        
         answers = data.get('answers', [])
         subject = data.get('subject')
         topic = data.get('topic')
@@ -574,7 +736,7 @@ def submit_answers():
             })
 
         # Update user progress
-        if topic and mode == 'practice':  # Only update progress for practice mode with specific topic
+        if topic and mode == 'practice':
             conn = get_db_connection()
             progress = conn.execute(
                 'SELECT * FROM user_progress WHERE user_id = ? AND subject = ? AND topic = ? AND grade_level = ?',
@@ -609,10 +771,12 @@ def submit_answers():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/progress', methods=['GET'])
-@jwt_required()
+@token_required
 def get_user_progress():
     try:
-        user_id = get_jwt_identity()
+        token = request.headers.get('Authorization').split(' ')[1]
+        user_id = sessions[token]['user_id']
+        
         conn = get_db_connection()
         
         progress = conn.execute('''
@@ -650,10 +814,12 @@ def get_user_progress():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/user/profile', methods=['GET'])
-@jwt_required()
+@token_required
 def get_user_profile():
     try:
-        user_id = get_jwt_identity()
+        token = request.headers.get('Authorization').split(' ')[1]
+        user_id = sessions[token]['user_id']
+        
         conn = get_db_connection()
         
         user = conn.execute(
